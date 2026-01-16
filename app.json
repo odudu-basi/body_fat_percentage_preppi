@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "preppi-app",
+    "name": "Preppi",
     "slug": "preppi-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,17 +13,25 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "-5.Preppi-AI"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "YOUR_ANDROID_PACKAGE_HERE"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d0657aab-20fc-4229-998b-a88ba7b5ba16"
+      }
+    },
+    "owner": "odudu_basi"
   }
 }
