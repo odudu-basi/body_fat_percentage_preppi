@@ -1,28 +1,28 @@
 {
   "expo": {
-    "name": "Preppi",
-    "slug": "preppi-app",
+    "name": "BodyMax",
+    "slug": "bodymax-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/splash-icon.png",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#121212"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "-5.Preppi-AI"
+      "bundleIdentifier": "com.bodymax.app"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/splash-icon.png",
+        "backgroundColor": "#E85D04"
       },
       "edgeToEdgeEnabled": true,
-      "package": "YOUR_ANDROID_PACKAGE_HERE"
+      "package": "com.bodymax.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,6 +32,9 @@
         "projectId": "d0657aab-20fc-4229-998b-a88ba7b5ba16"
       }
     },
-    "owner": "odudu_basi"
+    "owner": "odudu_basi",
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
