@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,19 +9,40 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import CalorieCard from '../components/common/CalorieCard';
+import ScanTutorialModal from '../components/common/ScanTutorialModal';
 
 const { width } = Dimensions.get('window');
 
 const HomeScreen = () => {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const [showScanModal, setShowScanModal] = useState(false);
+
+  const handleScanPress = () => {
+    setShowScanModal(true);
+  };
+
+  const handleScanComplete = () => {
+    console.log('Scan completed!');
+    // TODO: Process the photos
+  };
+
+  const handleLogoPress = () => {
+    navigation.navigate('Buddy');
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
       {/* Header with Logo */}
       <View style={styles.header}>
-        <View style={styles.logoContainer}>
+        <TouchableOpacity 
+          style={styles.logoContainer} 
+          onPress={handleLogoPress}
+          activeOpacity={0.7}
+        >
           <Image
             source={require('../../assets/logo.png')}
             style={styles.headerLogo}
@@ -31,7 +52,7 @@ const HomeScreen = () => {
             <Text style={styles.brandBody}>Body</Text>
             <Text style={styles.brandMax}>Max</Text>
           </View>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Main Content */}
@@ -56,7 +77,11 @@ const HomeScreen = () => {
           </View>
 
           {/* Scan Button */}
-          <TouchableOpacity style={styles.scanButton} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.scanButton} 
+            activeOpacity={0.8}
+            onPress={handleScanPress}
+          >
             <Text style={styles.scanButtonText}>Scan</Text>
           </TouchableOpacity>
         </View>
@@ -70,6 +95,13 @@ const HomeScreen = () => {
           />
         </View>
       </ScrollView>
+
+      {/* Scan Tutorial Modal */}
+      <ScanTutorialModal
+        visible={showScanModal}
+        onClose={() => setShowScanModal(false)}
+        onComplete={handleScanComplete}
+      />
     </View>
   );
 };

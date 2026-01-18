@@ -21,6 +21,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import SplashScreenComponent from './src/screens/SplashScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import { Colors } from './src/constants/theme';
+import { AuthProvider } from './src/context/AuthContext';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -54,18 +55,20 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <View style={styles.container} onLayout={onLayoutRootView}>
-        <StatusBar style="light" />
-        {showSplash ? (
-          <SplashScreenComponent onFinish={handleSplashFinish} />
-        ) : (
-          <NavigationContainer>
-            <AppNavigator />
-          </NavigationContainer>
-        )}
-      </View>
-    </SafeAreaProvider>
+    <AuthProvider>
+      <SafeAreaProvider>
+        <View style={styles.container} onLayout={onLayoutRootView}>
+          <StatusBar style="light" />
+          {showSplash ? (
+            <SplashScreenComponent onFinish={handleSplashFinish} />
+          ) : (
+            <NavigationContainer>
+              <AppNavigator />
+            </NavigationContainer>
+          )}
+        </View>
+      </SafeAreaProvider>
+    </AuthProvider>
   );
 }
 
