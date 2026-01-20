@@ -14,17 +14,28 @@ const AddCaloriesBox = ({ onDescribe, onPhoto }) => {
   const [modalVisible, setModalVisible] = useState(false);
 
   const handlePress = () => {
+    console.log('[AddCaloriesBox] Opening modal');
     setModalVisible(true);
   };
 
   const handleDescribe = () => {
+    console.log('[AddCaloriesBox] Describe pressed, closing modal');
     setModalVisible(false);
-    onDescribe?.();
+    // Add small delay to ensure modal is fully closed before callback
+    setTimeout(() => {
+      console.log('[AddCaloriesBox] Calling onDescribe callback');
+      onDescribe?.();
+    }, 300);
   };
 
   const handlePhoto = () => {
+    console.log('[AddCaloriesBox] Photo pressed, closing modal');
     setModalVisible(false);
-    onPhoto?.();
+    // Add small delay to ensure modal is fully closed before callback
+    setTimeout(() => {
+      console.log('[AddCaloriesBox] Calling onPhoto callback');
+      onPhoto?.();
+    }, 300);
   };
 
   return (

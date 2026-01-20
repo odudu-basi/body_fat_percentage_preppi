@@ -14,26 +14,69 @@ const ExerciseCard = ({
   duration,
   calories,
   icon,
+  isChecked = false,
+  onToggle,
   onPress,
+  onLongPress,
 }) => {
+  const handlePress = () => {
+    if (onToggle) {
+      onToggle();
+    } else if (onPress) {
+      onPress();
+    }
+  };
+
   return (
     <TouchableOpacity 
       style={styles.container} 
-      onPress={onPress}
+      onPress={handlePress}
+      onLongPress={onLongPress}
+      delayLongPress={500}
       activeOpacity={0.8}
     >
       {/* Orange background card (peeking behind) */}
-      <View style={styles.backgroundCard} />
+      <View style={[
+        styles.backgroundCard,
+        isChecked && styles.backgroundCardChecked
+      ]} />
       
       {/* Main card */}
-      <View style={styles.mainCard}>
+      <View style={[
+        styles.mainCard,
+        isChecked && styles.mainCardChecked
+      ]}>
+        {/* Checkbox */}
+        <TouchableOpacity 
+          style={[
+            styles.checkbox,
+            isChecked && styles.checkboxChecked
+          ]}
+          onPress={handlePress}
+          activeOpacity={0.7}
+        >
+          {isChecked && (
+            <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+          )}
+        </TouchableOpacity>
+
         {/* Left side - Icon and Info */}
         <View style={styles.leftContent}>
-          <View style={styles.iconContainer}>
-            <Ionicons name={icon} size={28} color={Colors.dark.textPrimary} />
+          <View style={[
+            styles.iconContainer,
+            isChecked && styles.iconContainerChecked
+          ]}>
+            <Ionicons 
+              name={icon} 
+              size={28} 
+              color={isChecked ? Colors.dark.primary : Colors.dark.textPrimary} 
+            />
           </View>
           <View style={styles.textContainer}>
-            <Text style={styles.title}>{title}</Text>
+            <Text style={[
+              styles.title,
+              isChecked && styles.titleChecked
+            ]}>{title}</Text>
             <Text style={styles.description} numberOfLines={2}>{description}</Text>
             <View style={styles.durationRow}>
               <Ionicons name="time-outline" size={14} color={Colors.dark.textSecondary} />
@@ -44,8 +87,17 @@ const ExerciseCard = ({
 
         {/* Right side - Calories */}
         <View style={styles.caloriesContainer}>
-          <Text style={styles.caloriesValue}>{calories}</Text>
+          <Text style={[
+            styles.caloriesValue,
+            isChecked && styles.caloriesValueChecked
+          ]}>{calories}</Text>
           <Text style={styles.caloriesLabel}>kcal</Text>
+          {isChecked && (
+            <View style={styles.burnedBadge}>
+              <Ionicons name="flame" size={12} color="#4CAF50" />
+              <Text style={styles.burnedText}>Burned</Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -66,6 +118,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.primary,
     borderRadius: BorderRadius.lg,
   },
+  backgroundCardChecked: {
+    backgroundColor: '#4CAF50', // Green when checked
+  },
   mainCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -73,8 +128,26 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.surface,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
+    paddingLeft: Spacing.md,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  mainCardChecked: {
+    borderColor: 'rgba(76, 175, 80, 0.3)', // Subtle green border when checked
+  },
+  checkbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: Colors.dark.textSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  checkboxChecked: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
   },
   leftContent: {
     flex: 1,
@@ -90,6 +163,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: Spacing.md,
   },
+  iconContainerChecked: {
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+  },
   textContainer: {
     flex: 1,
   },
@@ -98,6 +174,9 @@ const styles = StyleSheet.create({
     fontSize: Fonts.sizes.lg,
     color: Colors.dark.textPrimary,
     marginBottom: 4,
+  },
+  titleChecked: {
+    color: '#4CAF50',
   },
   description: {
     fontFamily: 'Inter_400Regular',
@@ -125,13 +204,26 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: Colors.dark.primary,
   },
+  caloriesValueChecked: {
+    color: '#4CAF50',
+  },
   caloriesLabel: {
     fontFamily: 'Inter_400Regular',
     fontSize: Fonts.sizes.sm,
     color: Colors.dark.textSecondary,
     marginTop: -2,
   },
+  burnedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  burnedText: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: Fonts.sizes.xs,
+    color: '#4CAF50',
+    marginLeft: 2,
+  },
 });
 
 export default ExerciseCard;
-

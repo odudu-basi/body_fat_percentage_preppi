@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "BodyMax",
-    "slug": "bodymax-app",
+    "slug": "Body_percentage_preppi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/splash-icon.png",
@@ -14,7 +14,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.bodymax.app"
+      "bundleIdentifier": "-5.Preppi-AI",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,19 +26,21 @@
         "backgroundColor": "#E85D04"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.bodymax.app"
+      "package": "com.preppi.ai"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "d0657aab-20fc-4229-998b-a88ba7b5ba16"
+        "projectId": "556dfebe-70d0-4560-a4ab-665cee803289"
       }
     },
     "owner": "odudu_basi",
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-apple-authentication",
+      "expo-dev-client"
     ]
   }
 }

@@ -1,19 +1,35 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 
 // Supabase configuration
 const SUPABASE_URL = 'https://zltkngnohnpaiowffpqc.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsdGtuZ25vaG5wYWlvd2ZmcHFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg3MDE0MjUsImV4cCI6MjA4NDI3NzQyNX0.pi7bIcokmSYR2Y0MJqvrMie9MHjWzRU2XpspNXfDw8Y';
 
 // Create Supabase client with AsyncStorage for session persistence
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
+let supabase;
+try {
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  });
+} catch (error) {
+  console.error('Failed to create Supabase client:', error);
+  // Create a basic client without storage as fallback
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+export { supabase };
 
 // ============================================
 // AUTH HELPERS
@@ -99,6 +115,84 @@ export const updatePassword = async (newPassword) => {
  */
 export const onAuthStateChange = (callback) => {
   return supabase.auth.onAuthStateChange(callback);
+};
+
+/**
+ * Check if Apple Sign In is available on this device
+ */
+export const isAppleSignInAvailable = async () => {
+  try {
+    return await AppleAuthentication.isAvailableAsync();
+  } catch (error) {
+    console.error('Error checking Apple Sign In availability:', error);
+    return false;
+  }
+};
+
+/**
+ * Sign in with Apple
+ */
+export const signInWithApple = async () => {
+  try {
+    // Generate a random nonce for security
+    const rawNonce = Array.from(
+      { length: 32 },
+      () => Math.random().toString(36).charAt(2)
+    ).join('');
+    
+    // Hash the nonce using SHA256
+    const hashedNonce = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      rawNonce
+    );
+
+    // Request Apple authentication
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashedNonce,
+    });
+
+    // Sign in with Supabase using the Apple ID token
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: credential.identityToken,
+      nonce: rawNonce,
+    });
+
+    if (error) throw error;
+
+    // If this is a new user, create their profile with Apple data
+    if (data.user) {
+      const fullName = credential.fullName;
+      const displayName = fullName 
+        ? `${fullName.givenName || ''} ${fullName.familyName || ''}`.trim()
+        : null;
+
+      // Check if profile exists, if not create one
+      const existingProfile = await getUserProfile(data.user.id);
+      if (!existingProfile) {
+        await upsertUserProfile({
+          id: data.user.id,
+          email: data.user.email || credential.email,
+          full_name: displayName,
+          avatar_url: null,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    if (error.code === 'ERR_REQUEST_CANCELED') {
+      // User canceled the sign in
+      return { data: null, error: { message: 'Sign in was canceled' } };
+    }
+    console.error('Apple Sign In error:', error);
+    return { data: null, error };
+  }
 };
 
 // ============================================

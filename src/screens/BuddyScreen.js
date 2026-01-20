@@ -16,13 +16,13 @@ const BuddyScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
 
   const handleAskAnything = () => {
-    // TODO: Navigate to chat or open chat modal
-    console.log('Ask me anything pressed');
+    // Navigate to chat screen
+    navigation.navigate('BuddyChat', {});
   };
 
   const handleSuggestionPress = (suggestion) => {
-    // TODO: Navigate to chat with pre-filled message
-    console.log('Suggestion pressed:', suggestion);
+    // Navigate to chat with pre-filled message
+    navigation.navigate('BuddyChat', { initialMessage: suggestion });
   };
 
   const suggestions = [

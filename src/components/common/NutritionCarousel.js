@@ -15,60 +15,90 @@ const CARD_WIDTH = SCREEN_WIDTH - (Spacing.lg * 2);
 const NutritionCarousel = ({
   caloriesLeft = 2223,
   bonusCalories = 200,
+  // Primary macros (Page 1)
   protein = { value: 120, unit: 'g' },
   carbs = { value: 200, unit: 'g' },
   fats = { value: 65, unit: 'g' },
+  // Secondary macros (Page 2)
+  fiber = { value: 25, unit: 'g' },
+  sodium = { value: 2300, unit: 'mg' },
+  sugar = { value: 50, unit: 'g' },
 }) => {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const scrollViewRef = useRef(null);
+  const [macroActiveIndex, setMacroActiveIndex] = useState(0);
+  const macroScrollRef = useRef(null);
 
-  const handleScroll = (event) => {
+  const handleMacroScroll = (event) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / CARD_WIDTH);
-    setActiveIndex(index);
+    setMacroActiveIndex(index);
   };
 
   return (
     <View style={styles.container}>
+      {/* Calorie Card - Fixed (not swipeable) */}
+      <View style={styles.calorieCardWrapper}>
+        <DailyCalorieCard 
+          caloriesLeft={caloriesLeft}
+          bonusCalories={bonusCalories}
+          onPress={() => console.log('Calorie card pressed')}
+        />
+      </View>
+
+      {/* Macro Cards - Swipeable Carousel */}
       <ScrollView
-        ref={scrollViewRef}
+        ref={macroScrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={handleScroll}
+        onScroll={handleMacroScroll}
         scrollEventThrottle={16}
         decelerationRate="fast"
-        snapToInterval={CARD_WIDTH + Spacing.md}
+        snapToInterval={CARD_WIDTH}
         snapToAlignment="start"
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.macroScrollContent}
       >
-        {/* Page 1: Calorie Card */}
-        <View style={[styles.cardWrapper, { width: CARD_WIDTH }]}>
-          <DailyCalorieCard 
-            caloriesLeft={caloriesLeft}
-            bonusCalories={bonusCalories}
-            onPress={() => console.log('Calorie card pressed')}
-          />
-        </View>
-
-        {/* Page 2: Macro Cards */}
-        <View style={[styles.cardWrapper, { width: CARD_WIDTH }]}>
+        {/* Page 1: Primary Macros (Protein, Carbs, Fats) */}
+        <View style={[styles.macroPageWrapper, { width: CARD_WIDTH }]}>
           <MacroCard 
             protein={protein}
             carbs={carbs}
             fats={fats}
           />
         </View>
+
+        {/* Page 2: Secondary Macros (Fiber, Sodium, Sugar) */}
+        <View style={[styles.macroPageWrapper, { width: CARD_WIDTH }]}>
+          <MacroCard 
+            protein={fiber}
+            carbs={sodium}
+            fats={sugar}
+            labels={{
+              first: 'Fiber left',
+              second: 'Sodium left',
+              third: 'Sugar left',
+            }}
+            icons={{
+              first: 'nutrition',
+              second: 'flask',
+              third: 'cube',
+            }}
+            colors={{
+              first: '#8BC34A',  // Light green for fiber
+              second: '#9C27B0', // Purple for sodium
+              third: '#FF5722',  // Deep orange for sugar
+            }}
+          />
+        </View>
       </ScrollView>
 
-      {/* Pagination Dots */}
+      {/* Pagination Dots for Macros */}
       <View style={styles.pagination}>
         {[0, 1].map((index) => (
           <View
             key={index}
             style={[
               styles.dot,
-              activeIndex === index && styles.dotActive,
+              macroActiveIndex === index && styles.dotActive,
             ]}
           />
         ))}
@@ -81,11 +111,14 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: Spacing.md,
   },
-  scrollContent: {
-    paddingRight: Spacing.md,
+  calorieCardWrapper: {
+    marginBottom: Spacing.md,
   },
-  cardWrapper: {
-    marginRight: Spacing.md,
+  macroScrollContent: {
+    // No extra padding needed
+  },
+  macroPageWrapper: {
+    // Each page takes full width
   },
   pagination: {
     flexDirection: 'row',

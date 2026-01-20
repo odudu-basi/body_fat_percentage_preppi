@@ -8,6 +8,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -49,13 +50,13 @@ const DailyIcon = ({ focused }) => (
   </View>
 );
 
-const ProfileIcon = ({ focused, initials = 'OV' }) => (
+const FeedbackIcon = ({ focused }) => (
   <View style={styles.iconContainer}>
-    <View style={[styles.profileCircle, focused && styles.profileCircleFocused]}>
-      <Text style={[styles.profileInitials, focused && styles.profileInitialsFocused]}>
-        {initials}
-      </Text>
-    </View>
+    <Ionicons 
+      name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} 
+      size={24} 
+      color={focused ? Colors.dark.textPrimary : Colors.dark.textSecondary} 
+    />
   </View>
 );
 
@@ -70,8 +71,8 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
         return <DailyIcon focused={focused} />;
       case 'Progress':
         return <ProgressIcon focused={focused} />;
-      case 'Profile':
-        return <ProfileIcon focused={focused} />;
+      case 'Feedback':
+        return <FeedbackIcon focused={focused} />;
       default:
         return null;
     }
@@ -284,26 +285,6 @@ const styles = StyleSheet.create({
   },
   checkmarkFocused: {
     backgroundColor: Colors.dark.textPrimary,
-  },
-  // Profile Icon
-  profileCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#4ECDC4',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileCircleFocused: {
-    backgroundColor: '#4ECDC4',
-  },
-  profileInitials: {
-    fontFamily: 'Rubik_600SemiBold',
-    fontSize: 10,
-    color: Colors.dark.background,
-  },
-  profileInitialsFocused: {
-    color: Colors.dark.background,
   },
 });
 

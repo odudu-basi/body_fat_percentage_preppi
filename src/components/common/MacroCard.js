@@ -24,29 +24,47 @@ const MacroCard = ({
   protein = { value: 120, unit: 'g' },
   carbs = { value: 200, unit: 'g' },
   fats = { value: 65, unit: 'g' },
+  // Custom labels for secondary macros
+  labels = {
+    first: 'Protein left',
+    second: 'Carbs left',
+    third: 'Fats left',
+  },
+  // Custom icons for secondary macros
+  icons = {
+    first: 'fitness',
+    second: 'leaf',
+    third: 'water',
+  },
+  // Custom colors for secondary macros
+  colors = {
+    first: '#E85D04',  // Orange for protein
+    second: '#4CAF50', // Green for carbs
+    third: '#FFC107',  // Yellow/gold for fats
+  },
 }) => {
   return (
     <View style={styles.container}>
       <MacroItem 
         value={protein.value}
         unit={protein.unit}
-        label="Protein left"
-        icon="fitness"
-        iconColor="#E85D04" // Orange from design.md
+        label={labels.first}
+        icon={icons.first}
+        iconColor={colors.first}
       />
       <MacroItem 
         value={carbs.value}
         unit={carbs.unit}
-        label="Carbs left"
-        icon="leaf"
-        iconColor="#4CAF50" // Green for carbs
+        label={labels.second}
+        icon={icons.second}
+        iconColor={colors.second}
       />
       <MacroItem 
         value={fats.value}
         unit={fats.unit}
-        label="Fats left"
-        icon="water"
-        iconColor="#FFC107" // Yellow/gold for fats
+        label={labels.third}
+        icon={icons.third}
+        iconColor={colors.third}
       />
     </View>
   );

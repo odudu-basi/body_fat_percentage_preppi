@@ -14,12 +14,16 @@ const ChecklistItem = ({
   icon,
   iconColor = Colors.dark.primary,
   isChecked = false,
+  isRecurring = false,
   onPress,
+  onLongPress,
 }) => {
   return (
     <TouchableOpacity 
       style={[styles.container, isChecked && styles.containerChecked]} 
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={500}
       activeOpacity={0.7}
     >
       {/* Left side - Icon */}
@@ -29,7 +33,14 @@ const ChecklistItem = ({
 
       {/* Middle - Title & Subtitle */}
       <View style={styles.textContainer}>
-        <Text style={[styles.title, isChecked && styles.titleChecked]}>{title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, isChecked && styles.titleChecked]}>{title}</Text>
+          {isRecurring && (
+            <View style={styles.recurringBadge}>
+              <Ionicons name="repeat" size={12} color={Colors.dark.textSecondary} />
+            </View>
+          )}
+        </View>
         {subtitle && (
           <Text style={styles.subtitle}>{subtitle}</Text>
         )}
@@ -71,14 +82,25 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: Spacing.md,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   title: {
     fontFamily: 'Rubik_600SemiBold',
     fontSize: Fonts.sizes.lg,
     color: Colors.dark.textPrimary,
+    flex: 1,
   },
   titleChecked: {
     color: Colors.dark.textSecondary,
     textDecorationLine: 'line-through',
+  },
+  recurringBadge: {
+    marginLeft: Spacing.xs,
+    padding: 4,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.dark.background,
   },
   subtitle: {
     fontFamily: 'Inter_400Regular',
@@ -102,4 +124,3 @@ const styles = StyleSheet.create({
 });
 
 export default ChecklistItem;
-

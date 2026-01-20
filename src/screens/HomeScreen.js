@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,24 +10,111 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
-import CalorieCard from '../components/common/CalorieCard';
+import DailyCalorieCard from '../components/common/DailyCalorieCard';
+import BodyScanCard from '../components/common/BodyScanCard';
 import ScanTutorialModal from '../components/common/ScanTutorialModal';
+import SettingsButton from '../components/common/SettingsButton';
+import { getLatestBodyScan, deleteBodyScan } from '../services/bodyScanStorage';
+import { getTodaysCalories } from '../services/mealStorage';
+import { getTodaysBurnedCalories } from '../services/exerciseStorage';
 
 const { width } = Dimensions.get('window');
+
+const TARGET_CALORIES = 2223; // Daily calorie target
 
 const HomeScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [showScanModal, setShowScanModal] = useState(false);
+  const [latestScan, setLatestScan] = useState(null);
+  const [totalCalories, setTotalCalories] = useState(0);
+  const [exerciseCalories, setExerciseCalories] = useState(0);
+
+  // Load data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const loadData = async () => {
+        console.log('HomeScreen focused - loading data...');
+        
+        // Load latest scan
+        const scan = await getLatestBodyScan();
+        console.log('Latest scan loaded:', scan?.id || 'none');
+        setLatestScan(scan);
+        
+        // Load today's calories
+        try {
+          const calories = await getTodaysCalories();
+          setTotalCalories(calories);
+          console.log('Today\'s calories loaded:', calories);
+        } catch (error) {
+          console.error('Error loading calories:', error);
+        }
+        
+        // Load exercise burned calories
+        try {
+          const burned = await getTodaysBurnedCalories();
+          setExerciseCalories(burned);
+          console.log('Exercise calories loaded:', burned);
+        } catch (error) {
+          console.error('Error loading exercise calories:', error);
+        }
+      };
+      loadData();
+    }, [])
+  );
+
+  // Also load on initial mount
+  useEffect(() => {
+    const loadInitialData = async () => {
+      const scan = await getLatestBodyScan();
+      setLatestScan(scan);
+      
+      try {
+        const calories = await getTodaysCalories();
+        setTotalCalories(calories);
+      } catch (error) {
+        console.error('Error loading initial calories:', error);
+      }
+      
+      try {
+        const burned = await getTodaysBurnedCalories();
+        setExerciseCalories(burned);
+      } catch (error) {
+        console.error('Error loading initial exercise calories:', error);
+      }
+    };
+    loadInitialData();
+  }, []);
 
   const handleScanPress = () => {
     setShowScanModal(true);
   };
 
-  const handleScanComplete = () => {
-    console.log('Scan completed!');
-    // TODO: Process the photos
+  const handleScanCardPress = () => {
+    // Navigate to scan details screen
+    navigation.navigate('ScanDetails', { scanData: latestScan });
+  };
+
+  const handleDeleteScan = async (scanId) => {
+    const success = await deleteBodyScan(scanId);
+    if (success) {
+      // Reload the latest scan (which will be null if deleted)
+      const scan = await getLatestBodyScan();
+      setLatestScan(scan);
+    }
+  };
+
+  const handleScanComplete = async (scanData) => {
+    console.log('Scan completed with data:', scanData);
+    
+    // Close the modal
+    setShowScanModal(false);
+    
+    // Navigate to results screen with scan data
+    // The ResultsScreen will handle the API call
+    navigation.navigate('Results', { scanData });
   };
 
   const handleLogoPress = () => {
@@ -36,7 +123,7 @@ const HomeScreen = () => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
-      {/* Header with Logo */}
+      {/* Header with Logo and Settings */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.logoContainer} 
@@ -53,6 +140,7 @@ const HomeScreen = () => {
             <Text style={styles.brandMax}>Max</Text>
           </View>
         </TouchableOpacity>
+        <SettingsButton onPress={() => navigation.navigate('Profile')} />
       </View>
 
       {/* Main Content */}
@@ -63,18 +151,55 @@ const HomeScreen = () => {
       >
         {/* Image Upload Area */}
         <View style={styles.uploadContainer}>
-          <View style={styles.uploadArea}>
-            <View style={styles.uploadIconContainer}>
-              <View style={styles.cameraIcon}>
-                <View style={styles.cameraBody} />
-                <View style={styles.cameraLens} />
+          {latestScan?.front_image_path ? (
+            // Show latest scan image with overlay
+            <TouchableOpacity 
+              style={styles.scanImageArea}
+              onPress={handleScanCardPress}
+              activeOpacity={0.9}
+            >
+              <Image 
+                source={{ uri: latestScan.front_image_path }}
+                style={styles.scanPreviewImage}
+                resizeMode="cover"
+              />
+              {/* Gradient overlay for text readability */}
+              <View style={styles.scanImageOverlay} />
+              
+              {/* Body fat percentage - top right */}
+              <View style={styles.percentageOverlay}>
+                <Text style={styles.percentageOverlayValue}>
+                  {latestScan.body_fat_percentage ? Math.round(latestScan.body_fat_percentage * 10) / 10 : '--'}%
+                </Text>
+                <Text style={styles.percentageOverlayLabel}>Body Fat</Text>
               </View>
+              
+              {/* Date - bottom right */}
+              <View style={styles.dateOverlay}>
+                <Text style={styles.dateOverlayText}>
+                  {new Date(latestScan.scan_date).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            // Show empty upload area
+            <View style={styles.uploadArea}>
+              <View style={styles.uploadIconContainer}>
+                <View style={styles.cameraIcon}>
+                  <View style={styles.cameraBody} />
+                  <View style={styles.cameraLens} />
+                </View>
+              </View>
+              <Text style={styles.uploadText}>Upload your photo</Text>
+              <Text style={styles.uploadSubtext}>
+                Take or upload a photo of your torso to analyze body fat percentage
+              </Text>
             </View>
-            <Text style={styles.uploadText}>Upload your photo</Text>
-            <Text style={styles.uploadSubtext}>
-              Take or upload a photo of your torso to analyze body fat percentage
-            </Text>
-          </View>
+          )}
 
           {/* Scan Button */}
           <TouchableOpacity 
@@ -82,16 +207,28 @@ const HomeScreen = () => {
             activeOpacity={0.8}
             onPress={handleScanPress}
           >
-            <Text style={styles.scanButtonText}>Scan</Text>
+            <Text style={styles.scanButtonText}>{latestScan ? 'New Scan' : 'Scan'}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Calorie Card */}
+        {/* Body Scan Card - Only show if there's a scan */}
+        {latestScan && (
+          <View style={styles.scanSection}>
+            <Text style={styles.sectionTitle}>Latest Body Scan</Text>
+            <BodyScanCard 
+              scanData={latestScan}
+              onPress={handleScanCardPress}
+              onDelete={handleDeleteScan}
+            />
+          </View>
+        )}
+
+        {/* Calorie Card - Same as Nutrition tab */}
         <View style={styles.calorieSection}>
-          <CalorieCard 
-            currentCalories={1250}
-            targetCalories={2000}
-            onPress={() => console.log('Calorie card pressed')}
+          <DailyCalorieCard 
+            caloriesLeft={TARGET_CALORIES - totalCalories + exerciseCalories}
+            bonusCalories={exerciseCalories}
+            onPress={() => navigation.navigate('Daily', { initialTab: 'Nutrition' })}
           />
         </View>
       </ScrollView>
@@ -112,6 +249,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
   },
@@ -148,8 +288,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: Spacing.md,
   },
-  calorieSection: {
+  scanSection: {
     marginTop: Spacing.xl,
+  },
+  sectionTitle: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  calorieSection: {
+    marginTop: Spacing.lg,
   },
   uploadArea: {
     width: width - Spacing.lg * 2,
@@ -162,6 +313,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
+  },
+  scanImageArea: {
+    width: width - Spacing.lg * 2,
+    aspectRatio: 0.85,
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  scanPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  scanImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  percentageOverlay: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    alignItems: 'flex-end',
+  },
+  percentageOverlayValue: {
+    fontFamily: 'Rubik_700Bold',
+    fontSize: 36,
+    color: Colors.dark.primary,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+  },
+  percentageOverlayLabel: {
+    fontFamily: 'Rubik_500Medium',
+    fontSize: Fonts.sizes.sm,
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+    marginTop: -4,
+  },
+  dateOverlay: {
+    position: 'absolute',
+    bottom: Spacing.md,
+    right: Spacing.md,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+  },
+  dateOverlayText: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: Fonts.sizes.sm,
+    color: '#FFFFFF',
   },
   uploadIconContainer: {
     width: 80,

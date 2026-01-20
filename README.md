@@ -67,6 +67,25 @@ npm run ios
 npm run android
 ```
 
+## Subscriptions & Paywall
+Superwall:
+  https://superwall.com/docs/expo/quickstart/install\
+  https://superwall.com/docs/expo/quickstart/configure\
+  https://superwall.com/docs/expo/quickstart/present-first-pay
+  wall\
+  https://superwall.com/docs/expo/quickstart/user-management 
+  https://superwall.com/docs/expo/quickstart/feature-gating
+  https://superwall.com/docs/expo/quickstart/tracking-subscription-state
+  https://superwall.com/docs/expo/quickstart/setting-user-properties
+  https://superwall.com/docs/expo/quickstart/in-app-paywall-previews
+  suoerwall webchokout 
+  https://superwall.com/docs/expo/guides/web-checkout
+  https://superwall.com/docs/expo/guides/web-checkout/post-checkout-redirecting
+  https://superwall.com/docs/expo/guides/web-checkout/using-revenuecat
+  https://superwall.com/docs/expo/guides/web-checkout/linking-membership-to-iOS-app
+- **Superwall**: Used for paywall UI and A/B testing different paywall designs
+- **RevenueCat**: Used for handling subscriptions, purchase validation, and managing entitlements
+
 ## Configuration
 
 Before deploying, update `app.json` with your existing App Store credentials:
