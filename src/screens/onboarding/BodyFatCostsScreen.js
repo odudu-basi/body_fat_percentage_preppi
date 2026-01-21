@@ -38,7 +38,7 @@ const BodyFatCostsScreen = () => {
   // Typewriter effect for title
   useEffect(() => {
     let currentIndex = 0;
-    const typingSpeed = 30; // milliseconds per character
+    const typingSpeed = 50; // milliseconds per character (slowed down from 30ms)
 
     const typeNextCharacter = () => {
       if (currentIndex < fullTitle.length) {
@@ -57,8 +57,8 @@ const BodyFatCostsScreen = () => {
   useEffect(() => {
     if (!titleComplete) return;
 
-    const animationDelay = 200; // milliseconds between each item
-    const animationDuration = 400; // duration of fade-in
+    const animationDelay = 350; // milliseconds between each item (slowed down from 200ms)
+    const animationDuration = 600; // duration of fade-in (slowed down from 400ms)
 
     const animations = fadeAnims.map((anim, index) => {
       return Animated.timing(anim, {
