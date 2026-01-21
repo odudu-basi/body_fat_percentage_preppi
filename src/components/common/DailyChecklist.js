@@ -22,6 +22,36 @@ import {
   toggleChecklistCompletion,
   deleteChecklistItem,
 } from '../../services/checklistStorage';
+import { useAuth } from '../../context/AuthContext';
+import { BODY_FAT_LOSS_HABITS } from '../../constants/checklistHabits';
+
+/**
+ * Get a deterministic random selection of items based on date
+ * This ensures the same 7 items are shown throughout the day
+ */
+const getRandomItemsForToday = (items, count = 7) => {
+  if (!items || items.length === 0) return [];
+  if (items.length <= count) return items;
+
+  // Use today's date as a seed for consistent daily selection
+  const today = new Date();
+  const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+
+  // Simple seeded random number generator
+  const seededRandom = (seed) => {
+    const x = Math.sin(seed++) * 10000;
+    return x - Math.floor(x);
+  };
+
+  // Create a shuffled copy using the seeded random
+  const shuffled = [...items];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(seed + i) * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  return shuffled.slice(0, count);
+};
 
 // Available icons for checklist items
 const CHECKLIST_ICONS = [
@@ -37,9 +67,20 @@ const CHECKLIST_ICONS = [
   { name: 'time', label: 'Time', color: '#607D8B' },
   { name: 'heart', label: 'Cardio', color: '#E91E63' },
   { name: 'happy', label: 'Mood', color: '#FFEB3B' },
+  { name: 'sunny', label: 'Sunlight', color: '#FFA726' },
+  { name: 'leaf', label: 'Veggies', color: '#66BB6A' },
+  { name: 'fitness', label: 'Strength', color: '#E85D04' },
+  { name: 'body', label: 'Stretch', color: '#AB47BC' },
+  { name: 'fast-food', label: 'Food', color: '#FF7043' },
+  { name: 'walk', label: 'Walk', color: '#FF9800' },
+  { name: 'calendar', label: 'Plan', color: '#42A5F5' },
+  { name: 'camera', label: 'Photo', color: '#26A69A' },
+  { name: 'close-circle', label: 'Avoid', color: '#EF5350' },
+  { name: 'checkmark-done', label: 'Done', color: '#66BB6A' },
 ];
 
 const DailyChecklist = () => {
+  const { profile } = useAuth();
   const [checklistItems, setChecklistItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -52,12 +93,34 @@ const DailyChecklist = () => {
   });
   const [saving, setSaving] = useState(false);
 
-  // Load checklist from database
+  // Load checklist: predefined body fat loss habits + custom user items
   const loadChecklist = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getTodaysChecklist();
-      setChecklistItems(data);
+
+      // Get today's 7 random items from predefined habits
+      const todaysHabits = getRandomItemsForToday(BODY_FAT_LOSS_HABITS, 7);
+
+      // Get custom user items from database
+      const customItems = await getTodaysChecklist();
+
+      // Format predefined habits for display
+      const formattedHabits = todaysHabits.map((habit, index) => ({
+        id: `habit-${index}`,
+        title: habit.title,
+        subtitle: habit.subtitle,
+        icon: habit.icon,
+        iconColor: habit.iconColor,
+        is_completed: false,
+        is_recurring: true,
+        is_custom: false,
+        sort_order: index,
+      }));
+
+      // Merge with custom items
+      const allItems = [...formattedHabits, ...customItems.map(item => ({ ...item, is_custom: true }))];
+
+      setChecklistItems(allItems);
     } catch (error) {
       console.error('Error loading checklist:', error);
     } finally {
@@ -72,28 +135,31 @@ const DailyChecklist = () => {
   // Handle toggling item completion
   const handleToggleItem = async (item) => {
     const newStatus = !item.is_completed;
-    
+
     // Optimistic update
-    setChecklistItems(prev => prev.map(i => 
+    setChecklistItems(prev => prev.map(i =>
       i.id === item.id ? { ...i, is_completed: newStatus } : i
     ));
 
-    // Save to database
-    const result = await toggleChecklistCompletion(item.id, newStatus, item.completion_id);
-    if (!result) {
-      // Revert on failure
-      setChecklistItems(prev => prev.map(i => 
-        i.id === item.id ? { ...i, is_completed: !newStatus } : i
-      ));
-      Alert.alert('Error', 'Failed to update item. Please try again.');
-    } else {
-      // Update completion_id if it was newly created
-      if (!item.completion_id) {
-        setChecklistItems(prev => prev.map(i => 
-          i.id === item.id ? { ...i, completion_id: result.id } : i
+    // Only save to database if it's a custom item
+    if (item.is_custom) {
+      const result = await toggleChecklistCompletion(item.id, newStatus, item.completion_id);
+      if (!result) {
+        // Revert on failure
+        setChecklistItems(prev => prev.map(i =>
+          i.id === item.id ? { ...i, is_completed: !newStatus } : i
         ));
+        Alert.alert('Error', 'Failed to update item. Please try again.');
+      } else {
+        // Update completion_id if it was newly created
+        if (!item.completion_id) {
+          setChecklistItems(prev => prev.map(i =>
+            i.id === item.id ? { ...i, completion_id: result.id } : i
+          ));
+        }
       }
     }
+    // For AI-generated items, just keep the state locally (resets daily)
   };
 
   // Handle deleting item

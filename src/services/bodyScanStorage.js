@@ -1,19 +1,33 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
+import {
+  saveBodyScan as storageLayerSaveBodyScan,
+  getBodyScans as storageLayerGetBodyScans,
+  getLatestBodyScan as storageLayerGetLatestBodyScan,
+} from './storage';
+
+// Detect if running in Expo Go (development mode)
+const isExpoGo = Constants.appOwnership === 'expo';
+const USE_LOCAL_STORAGE = isExpoGo;
 
 /**
- * Save a body scan result to Supabase
- * @param {Object} scanData - The scan data to save
- * @returns {Promise<Object>} - The saved scan with ID
+ * Save a body scan result
+ * Uses storage abstraction layer (local in dev, Supabase in production)
  */
 export const saveBodyScan = async (scanData) => {
   try {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    // Get current user ID
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+      userId = user.id;
+    }
 
-    // Format data for Supabase body_scans table
+    // Format data for storage
     const scanRecord = {
-      user_id: user.id,
+      user_id: userId,
       scan_date: new Date().toISOString().split('T')[0],
       body_fat_percentage: scanData.body_fat_percentage,
       confidence_level: scanData.confidence_level,
@@ -34,18 +48,8 @@ export const saveBodyScan = async (scanData) => {
       biometric_notes: scanData.biometric_notes,
     };
 
-    const { data, error } = await supabase
-      .from('body_scans')
-      .insert(scanRecord)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    console.log('Body scan saved to Supabase:', data.id);
-    
-    // Return in the format expected by the app
-    return formatScanFromDB(data);
+    const result = await storageLayerSaveBodyScan(scanRecord);
+    return formatScanFromDB(result);
   } catch (error) {
     console.error('Error saving body scan:', error);
     throw error;
@@ -54,22 +58,19 @@ export const saveBodyScan = async (scanData) => {
 
 /**
  * Get all body scans for current user
- * @returns {Promise<Array>} - Array of scan objects
+ * Uses storage abstraction layer
  */
 export const getBodyScans = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      userId = user.id;
+    }
 
-    const { data, error } = await supabase
-      .from('body_scans')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-
-    return (data || []).map(formatScanFromDB);
+    const scans = await storageLayerGetBodyScans(userId);
+    return (scans || []).map(formatScanFromDB);
   } catch (error) {
     console.error('Error getting body scans:', error);
     return [];
@@ -78,24 +79,19 @@ export const getBodyScans = async () => {
 
 /**
  * Get the most recent body scan
- * @returns {Promise<Object|null>} - The most recent scan or null
+ * Uses storage abstraction layer
  */
 export const getLatestBodyScan = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      userId = user.id;
+    }
 
-    const { data, error } = await supabase
-      .from('body_scans')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
-
-    return data ? formatScanFromDB(data) : null;
+    const scan = await storageLayerGetLatestBodyScan(userId);
+    return scan ? formatScanFromDB(scan) : null;
   } catch (error) {
     console.error('Error getting latest body scan:', error);
     return null;
@@ -109,15 +105,22 @@ export const getLatestBodyScan = async () => {
  */
 export const getBodyScanById = async (scanId) => {
   try {
-    const { data, error } = await supabase
-      .from('body_scans')
-      .select('*')
-      .eq('id', scanId)
-      .single();
+    if (USE_LOCAL_STORAGE) {
+      // Local storage - get all scans and find by ID
+      const scans = await storageLayerGetBodyScans();
+      const scan = scans.find(s => s.id === scanId);
+      return scan ? formatScanFromDB(scan) : null;
+    } else {
+      // Supabase
+      const { data, error } = await supabase
+        .from('body_scans')
+        .select('*')
+        .eq('id', scanId)
+        .single();
 
-    if (error) throw error;
-
-    return data ? formatScanFromDB(data) : null;
+      if (error) throw error;
+      return data ? formatScanFromDB(data) : null;
+    }
   } catch (error) {
     console.error('Error getting body scan by ID:', error);
     return null;
@@ -131,15 +134,24 @@ export const getBodyScanById = async (scanId) => {
  */
 export const deleteBodyScan = async (scanId) => {
   try {
-    const { error } = await supabase
-      .from('body_scans')
-      .delete()
-      .eq('id', scanId);
+    if (USE_LOCAL_STORAGE) {
+      // Local storage - remove from array
+      const scans = await storageLayerGetBodyScans();
+      const updatedScans = scans.filter(s => s.id !== scanId);
+      await AsyncStorage.setItem('@bodymax:body_scans', JSON.stringify(updatedScans));
+      console.log('Body scan deleted:', scanId);
+      return true;
+    } else {
+      // Supabase
+      const { error } = await supabase
+        .from('body_scans')
+        .delete()
+        .eq('id', scanId);
 
-    if (error) throw error;
-
-    console.log('Body scan deleted:', scanId);
-    return true;
+      if (error) throw error;
+      console.log('Body scan deleted:', scanId);
+      return true;
+    }
   } catch (error) {
     console.error('Error deleting body scan:', error);
     return false;
@@ -152,18 +164,25 @@ export const deleteBodyScan = async (scanId) => {
  */
 export const clearAllBodyScans = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
+    if (USE_LOCAL_STORAGE) {
+      // Local storage - clear the key
+      await AsyncStorage.removeItem('@bodymax:body_scans');
+      console.log('All body scans cleared');
+      return true;
+    } else {
+      // Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
 
-    const { error } = await supabase
-      .from('body_scans')
-      .delete()
-      .eq('user_id', user.id);
+      const { error } = await supabase
+        .from('body_scans')
+        .delete()
+        .eq('user_id', user.id);
 
-    if (error) throw error;
-
-    console.log('All body scans cleared');
-    return true;
+      if (error) throw error;
+      console.log('All body scans cleared');
+      return true;
+    }
   } catch (error) {
     console.error('Error clearing body scans:', error);
     return false;

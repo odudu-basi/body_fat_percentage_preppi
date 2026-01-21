@@ -67,6 +67,132 @@ npm run ios
 npm run android
 ```
 
+## Storage Architecture
+
+BodyMax uses a **dual-storage system** that automatically switches between local and remote storage based on the environment.
+
+### How It Works
+
+The app detects whether it's running in **Expo Go** (development) or a **production build**:
+
+```javascript
+const isExpoGo = Constants.appOwnership === 'expo';
+const USE_LOCAL_STORAGE = isExpoGo;
+```
+
+### Environment-Based Storage
+
+#### Development Mode (Expo Go)
+- **Storage**: AsyncStorage (local device storage)
+- **User ID**: Uses mock 'dev-user' ID
+- **Console Log**: `💾 Storage Mode: LOCAL (AsyncStorage)`
+- **Benefits**:
+  - No Supabase connection required
+  - Fast offline development
+  - Data persists between app restarts
+  - No authentication needed during development
+
+#### Production Mode (EAS Build / TestFlight / App Store)
+- **Storage**: Supabase (cloud database)
+- **User ID**: Real authenticated user IDs from Apple Sign In
+- **Console Log**: `💾 Storage Mode: REMOTE (Supabase)`
+- **Benefits**:
+  - Cloud sync and backup
+  - Multi-device support
+  - User authentication
+  - Production-ready data management
+
+### Storage Abstraction Layer
+
+**File**: `src/services/storage.js`
+
+This file provides a unified API that automatically routes to the correct storage backend:
+
+**Exported Functions**:
+- `getUserProfile(userId)` / `upsertUserProfile(profileData)`
+- `saveBodyScan(scanData)` / `getBodyScans(userId)` / `getLatestBodyScan(userId)`
+- `saveMeal(mealData)` / `getMeals(date, userId)` / `deleteMeal(mealId)`
+- `getChecklist(date, userId)` / `saveChecklist(checklistData)`
+- `saveExercise(exerciseData)` / `getExercises(date, userId)` / `updateExercise(exerciseId, updates)` / `deleteExercise(exerciseId)`
+
+### AsyncStorage Keys (Development)
+
+When running in Expo Go, data is stored locally using these keys:
+
+```javascript
+@bodymax:user_profile          // User profile data
+@bodymax:body_scans            // Body fat scan results
+@bodymax:meal_logs             // Food/meal logs with nutrition data
+@bodymax:daily_checklists      // Daily checklist items
+@bodymax:exercise_logs         // Exercise logs and completion status
+@bodymax:checklist_items       // Checklist item definitions (for local mode)
+@bodymax:checklist_completions // Checklist completion records (for local mode)
+```
+
+### Supabase Tables (Production)
+
+When running as a production build, data is stored in these Supabase tables:
+
+```
+profiles                  // User profiles
+body_scans               // Body fat scan results
+meal_logs                // Food/meal logs
+daily_checklists         // Daily checklist data (unified)
+exercise_logs            // Exercise logs
+checklist_items          // Checklist item definitions
+checklist_completions    // Checklist completion records
+```
+
+### Service Files
+
+The following service files use the storage abstraction layer:
+
+**Core Storage Services** (use abstraction layer):
+- `src/services/bodyScanStorage.js` - Body fat scan operations
+- `src/services/mealStorage.js` - Meal logging and nutrition tracking
+- `src/services/checklistStorage.js` - Daily checklist management
+- `src/services/exerciseStorage.js` - Exercise tracking
+
+**Context** (uses storage layer):
+- `src/context/AuthContext.js` - User profile management
+
+**Direct Services** (bypass storage layer):
+- `src/services/claude.js` - Claude API for body fat analysis
+- `src/services/foodAnalysis.js` - Claude API for food analysis
+- `src/services/buddyChat.js` - OpenAI API for fitness buddy chat
+
+### Development Workflow
+
+1. **Start Expo Go**: Run `npx expo start` and open in Expo Go app
+2. **Storage Auto-Detects**: App automatically uses AsyncStorage
+3. **No Auth Required**: Bypass authentication (see AuthContext DEV_MODE_BYPASS_AUTH)
+4. **Data Persists**: All data saved locally on device
+5. **Clear Data**: Use `clearAllLocalStorage()` from storage.js to reset
+
+### Important Notes
+
+⚠️ **Data Separation**: Local development data and production data are completely separate. Data created in Expo Go will not appear in production builds.
+
+⚠️ **Mock User**: Development mode uses a mock user ID ('dev-user') and profile. Real authentication only works in production builds.
+
+⚠️ **Testing Production Storage**: To test Supabase integration, you must create a production build (EAS Build) - it won't work in Expo Go.
+
+⚠️ **Data Structure**: Both storage backends maintain identical data structures, ensuring seamless transition from development to production.
+
+### Utility Functions
+
+**Clear all local storage** (development only):
+```javascript
+import { clearAllLocalStorage } from './src/services/storage';
+await clearAllLocalStorage();
+```
+
+**Check storage mode**:
+```javascript
+import { getStorageMode } from './src/services/storage';
+console.log(getStorageMode()); // Returns 'local' or 'remote'
+```
+
 ## Subscriptions & Paywall
 Superwall:
   https://superwall.com/docs/expo/quickstart/install\

@@ -1,21 +1,35 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
+import {
+  saveMeal as storageLayerSaveMeal,
+  getMeals as storageLayerGetMeals,
+  deleteMeal as storageLayerDeleteMeal,
+} from './storage';
+
+// Detect if running in Expo Go (development mode)
+const isExpoGo = Constants.appOwnership === 'expo';
+const USE_LOCAL_STORAGE = isExpoGo;
 
 /**
- * Save a meal log to Supabase
- * @param {Object} mealData - The meal data to save
- * @returns {Promise<Object>} - The saved meal with ID
+ * Save a meal log
+ * Uses storage abstraction layer (local in dev, Supabase in production)
  */
 export const saveMeal = async (mealData) => {
   try {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    // Get current user ID
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+      userId = user.id;
+    }
 
     const now = new Date();
-    
-    // Format data for Supabase meal_logs table
+
+    // Format data for storage
     const mealRecord = {
-      user_id: user.id,
+      user_id: userId,
       meal_name: mealData.meal_name || 'Unknown Meal',
       meal_type: mealData.meal_time || 'snack',
       date: now.toISOString().split('T')[0],
@@ -37,18 +51,8 @@ export const saveMeal = async (mealData) => {
       },
     };
 
-    const { data, error } = await supabase
-      .from('meal_logs')
-      .insert(mealRecord)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    console.log('Meal saved to Supabase:', data.id);
-    
-    // Return in the format expected by the app
-    return formatMealFromDB(data);
+    const result = await storageLayerSaveMeal(mealRecord);
+    return formatMealFromDB(result);
   } catch (error) {
     console.error('Error saving meal:', error);
     throw error;
@@ -57,22 +61,19 @@ export const saveMeal = async (mealData) => {
 
 /**
  * Get all meals for current user
- * @returns {Promise<Array>} - Array of meal objects
+ * Uses storage abstraction layer
  */
 export const getMeals = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      userId = user.id;
+    }
 
-    const { data, error } = await supabase
-      .from('meal_logs')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-
-    return (data || []).map(formatMealFromDB);
+    const meals = await storageLayerGetMeals(null, userId);
+    return (meals || []).map(formatMealFromDB);
   } catch (error) {
     console.error('Error getting meals:', error);
     return [];
@@ -81,25 +82,20 @@ export const getMeals = async () => {
 
 /**
  * Get meals for today
- * @returns {Promise<Array>} - Array of meal objects for today
+ * Uses storage abstraction layer
  */
 export const getTodaysMeals = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      userId = user.id;
+    }
 
     const today = new Date().toISOString().split('T')[0];
-
-    const { data, error } = await supabase
-      .from('meal_logs')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('date', today)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-
-    return (data || []).map(formatMealFromDB);
+    const meals = await storageLayerGetMeals(today, userId);
+    return (meals || []).map(formatMealFromDB);
   } catch (error) {
     console.error('Error getting today\'s meals:', error);
     return [];
@@ -108,20 +104,25 @@ export const getTodaysMeals = async () => {
 
 /**
  * Get a specific meal by ID
- * @param {string} mealId - The meal ID
- * @returns {Promise<Object|null>} - The meal or null
  */
 export const getMealById = async (mealId) => {
   try {
-    const { data, error } = await supabase
-      .from('meal_logs')
-      .select('*')
-      .eq('id', mealId)
-      .single();
+    if (USE_LOCAL_STORAGE) {
+      // Local storage - get all meals and find by ID
+      const meals = await storageLayerGetMeals();
+      const meal = meals.find(m => m.id === mealId);
+      return meal ? formatMealFromDB(meal) : null;
+    } else {
+      // Supabase
+      const { data, error } = await supabase
+        .from('meal_logs')
+        .select('*')
+        .eq('id', mealId)
+        .single();
 
-    if (error) throw error;
-
-    return data ? formatMealFromDB(data) : null;
+      if (error) throw error;
+      return data ? formatMealFromDB(data) : null;
+    }
   } catch (error) {
     console.error('Error getting meal by ID:', error);
     return null;
@@ -130,36 +131,58 @@ export const getMealById = async (mealId) => {
 
 /**
  * Update a meal
- * @param {string} mealId - The meal ID to update
- * @param {Object} updates - The fields to update
- * @returns {Promise<Object|null>} - The updated meal or null
  */
 export const updateMeal = async (mealId, updates) => {
   try {
-    const updateData = {};
-    
-    if (updates.total_calories !== undefined) updateData.calories = updates.total_calories;
-    if (updates.servings !== undefined) updateData.servings = updates.servings;
-    if (updates.macros) {
-      if (updates.macros.protein_g !== undefined) updateData.protein_g = updates.macros.protein_g;
-      if (updates.macros.carbs_g !== undefined) updateData.carbs_g = updates.macros.carbs_g;
-      if (updates.macros.fat_g !== undefined) updateData.fat_g = updates.macros.fat_g;
-      if (updates.macros.fiber_g !== undefined) updateData.fiber_g = updates.macros.fiber_g;
-      if (updates.macros.sugar_g !== undefined) updateData.sugar_g = updates.macros.sugar_g;
-      if (updates.macros.sodium_mg !== undefined) updateData.sodium_mg = updates.macros.sodium_mg;
+    if (USE_LOCAL_STORAGE) {
+      // Local storage - get meals, update, save back
+      const meals = await storageLayerGetMeals();
+      const mealIndex = meals.findIndex(m => m.id === mealId);
+
+      if (mealIndex === -1) return null;
+
+      // Update the meal
+      const meal = meals[mealIndex];
+      if (updates.total_calories !== undefined) meal.calories = updates.total_calories;
+      if (updates.servings !== undefined) meal.servings = updates.servings;
+      if (updates.macros) {
+        if (updates.macros.protein_g !== undefined) meal.protein_g = updates.macros.protein_g;
+        if (updates.macros.carbs_g !== undefined) meal.carbs_g = updates.macros.carbs_g;
+        if (updates.macros.fat_g !== undefined) meal.fat_g = updates.macros.fat_g;
+        if (updates.macros.fiber_g !== undefined) meal.fiber_g = updates.macros.fiber_g;
+        if (updates.macros.sugar_g !== undefined) meal.sugar_g = updates.macros.sugar_g;
+        if (updates.macros.sodium_mg !== undefined) meal.sodium_mg = updates.macros.sodium_mg;
+      }
+
+      meals[mealIndex] = meal;
+      await AsyncStorage.setItem('@bodymax:meal_logs', JSON.stringify(meals));
+      console.log('Meal updated:', mealId);
+      return formatMealFromDB(meal);
+    } else {
+      // Supabase
+      const updateData = {};
+      if (updates.total_calories !== undefined) updateData.calories = updates.total_calories;
+      if (updates.servings !== undefined) updateData.servings = updates.servings;
+      if (updates.macros) {
+        if (updates.macros.protein_g !== undefined) updateData.protein_g = updates.macros.protein_g;
+        if (updates.macros.carbs_g !== undefined) updateData.carbs_g = updates.macros.carbs_g;
+        if (updates.macros.fat_g !== undefined) updateData.fat_g = updates.macros.fat_g;
+        if (updates.macros.fiber_g !== undefined) updateData.fiber_g = updates.macros.fiber_g;
+        if (updates.macros.sugar_g !== undefined) updateData.sugar_g = updates.macros.sugar_g;
+        if (updates.macros.sodium_mg !== undefined) updateData.sodium_mg = updates.macros.sodium_mg;
+      }
+
+      const { data, error } = await supabase
+        .from('meal_logs')
+        .update(updateData)
+        .eq('id', mealId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      console.log('Meal updated:', mealId);
+      return data ? formatMealFromDB(data) : null;
     }
-
-    const { data, error } = await supabase
-      .from('meal_logs')
-      .update(updateData)
-      .eq('id', mealId)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    console.log('Meal updated:', mealId);
-    return data ? formatMealFromDB(data) : null;
   } catch (error) {
     console.error('Error updating meal:', error);
     return null;
@@ -168,20 +191,12 @@ export const updateMeal = async (mealId, updates) => {
 
 /**
  * Delete a meal
- * @param {string} mealId - The meal ID to delete
- * @returns {Promise<boolean>} - Success status
+ * Uses storage abstraction layer
  */
 export const deleteMeal = async (mealId) => {
   try {
-    const { error } = await supabase
-      .from('meal_logs')
-      .delete()
-      .eq('id', mealId);
-
-    if (error) throw error;
-
-    console.log('Meal deleted:', mealId);
-    return true;
+    const result = await storageLayerDeleteMeal(mealId);
+    return result.success;
   } catch (error) {
     console.error('Error deleting meal:', error);
     return false;
@@ -204,26 +219,36 @@ export const getTodaysCalories = async () => {
 
 /**
  * Get meals for a specific date range
- * @param {string} startDate - Start date (YYYY-MM-DD)
- * @param {string} endDate - End date (YYYY-MM-DD)
- * @returns {Promise<Array>} - Array of meal objects
  */
 export const getMealsForDateRange = async (startDate, endDate) => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      userId = user.id;
+    }
 
-    const { data, error } = await supabase
-      .from('meal_logs')
-      .select('*')
-      .eq('user_id', user.id)
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date', { ascending: true });
+    if (USE_LOCAL_STORAGE) {
+      // Local storage - get all meals and filter by date range
+      const meals = await storageLayerGetMeals(null, userId);
+      return meals.filter(meal => {
+        const mealDate = meal.date || new Date(meal.created_at).toISOString().split('T')[0];
+        return mealDate >= startDate && mealDate <= endDate;
+      }).sort((a, b) => a.date.localeCompare(b.date));
+    } else {
+      // Supabase
+      const { data, error } = await supabase
+        .from('meal_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: true });
 
-    if (error) throw error;
-
-    return (data || []).map(formatMealFromDB);
+      if (error) throw error;
+      return (data || []).map(formatMealFromDB);
+    }
   } catch (error) {
     console.error('Error getting meals for date range:', error);
     return [];
@@ -370,22 +395,28 @@ const formatMealFromDB = (dbRecord) => {
 
 /**
  * Clear all meals for current user (for testing)
- * @returns {Promise<boolean>} - Success status
  */
 export const clearAllMeals = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
+    if (USE_LOCAL_STORAGE) {
+      // Local storage - clear the key
+      await AsyncStorage.removeItem('@bodymax:meal_logs');
+      console.log('All meals cleared');
+      return true;
+    } else {
+      // Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
 
-    const { error } = await supabase
-      .from('meal_logs')
-      .delete()
-      .eq('user_id', user.id);
+      const { error } = await supabase
+        .from('meal_logs')
+        .delete()
+        .eq('user_id', user.id);
 
-    if (error) throw error;
-
-    console.log('All meals cleared');
-    return true;
+      if (error) throw error;
+      console.log('All meals cleared');
+      return true;
+    }
   } catch (error) {
     console.error('Error clearing meals:', error);
     return false;

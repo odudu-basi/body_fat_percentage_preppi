@@ -1,4 +1,14 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
+import {
+  getChecklist as storageLayerGetChecklist,
+  saveChecklist as storageLayerSaveChecklist,
+} from './storage';
+
+// Detect if running in Expo Go (development mode)
+const isExpoGo = Constants.appOwnership === 'expo';
+const USE_LOCAL_STORAGE = isExpoGo;
 
 // Default checklist items that are created for new users
 const DEFAULT_CHECKLIST_ITEMS = [
@@ -62,56 +72,86 @@ const DEFAULT_CHECKLIST_ITEMS = [
  * Get today's checklist items for the current user
  * Includes recurring items + one-time items created today
  * Also fetches completion status for today
- * @returns {Promise<Array>} - Array of checklist items with completion status
  */
 export const getTodaysChecklist = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      userId = user.id;
+    }
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Get all checklist items that should show today:
-    // 1. Recurring items (show every day)
-    // 2. One-time items created today
-    const { data: items, error: itemsError } = await supabase
-      .from('checklist_items')
-      .select('*')
-      .eq('user_id', user.id)
-      .or(`is_recurring.eq.true,created_date.eq.${today}`)
-      .order('sort_order', { ascending: true });
+    if (USE_LOCAL_STORAGE) {
+      // Local storage - simplified implementation
+      // Store checklist items and completions separately
+      const itemsData = await AsyncStorage.getItem('@bodymax:checklist_items');
+      let items = itemsData ? JSON.parse(itemsData) : [];
 
-    if (itemsError) throw itemsError;
+      // If no items exist, create defaults
+      if (items.length === 0) {
+        items = await createDefaultChecklistItems(userId);
+      }
 
-    // If no items exist, create defaults
-    if (!items || items.length === 0) {
-      const defaultItems = await createDefaultChecklistItems(user.id);
-      return defaultItems;
+      // Filter to recurring items or items created today
+      items = items.filter(item => item.is_recurring || item.created_date === today);
+
+      // Get today's completions
+      const completionsData = await AsyncStorage.getItem('@bodymax:checklist_completions');
+      const allCompletions = completionsData ? JSON.parse(completionsData) : [];
+      const todaysCompletions = allCompletions.filter(c => c.date === today);
+
+      // Create completion map
+      const completionMap = {};
+      todaysCompletions.forEach(c => {
+        completionMap[c.checklist_item_id] = c;
+      });
+
+      // Merge items with completion status
+      return items.map(item => ({
+        ...formatChecklistItemFromDB(item),
+        is_completed: completionMap[item.id]?.is_completed || false,
+        completion_id: completionMap[item.id]?.id || null,
+      }));
+    } else {
+      // Supabase
+      const { data: items, error: itemsError } = await supabase
+        .from('checklist_items')
+        .select('*')
+        .eq('user_id', userId)
+        .or(`is_recurring.eq.true,created_date.eq.${today}`)
+        .order('sort_order', { ascending: true });
+
+      if (itemsError) throw itemsError;
+
+      if (!items || items.length === 0) {
+        const defaultItems = await createDefaultChecklistItems(userId);
+        return defaultItems;
+      }
+
+      const itemIds = items.map(item => item.id);
+      const { data: completions, error: completionsError } = await supabase
+        .from('checklist_completions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('date', today)
+        .in('checklist_item_id', itemIds);
+
+      if (completionsError) throw completionsError;
+
+      const completionMap = {};
+      (completions || []).forEach(c => {
+        completionMap[c.checklist_item_id] = c;
+      });
+
+      return items.map(item => ({
+        ...formatChecklistItemFromDB(item),
+        is_completed: completionMap[item.id]?.is_completed || false,
+        completion_id: completionMap[item.id]?.id || null,
+      }));
     }
-
-    // Get today's completions for these items
-    const itemIds = items.map(item => item.id);
-    const { data: completions, error: completionsError } = await supabase
-      .from('checklist_completions')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('date', today)
-      .in('checklist_item_id', itemIds);
-
-    if (completionsError) throw completionsError;
-
-    // Create a map of completions by item id
-    const completionMap = {};
-    (completions || []).forEach(c => {
-      completionMap[c.checklist_item_id] = c;
-    });
-
-    // Merge items with their completion status
-    return items.map(item => ({
-      ...formatChecklistItemFromDB(item),
-      is_completed: completionMap[item.id]?.is_completed || false,
-      completion_id: completionMap[item.id]?.id || null,
-    }));
   } catch (error) {
     console.error('Error getting today\'s checklist:', error);
     return [];
@@ -120,14 +160,13 @@ export const getTodaysChecklist = async () => {
 
 /**
  * Create default checklist items for a new user
- * @param {string} userId - User ID
- * @returns {Promise<Array>} - Array of created items
  */
 const createDefaultChecklistItems = async (userId) => {
   try {
     const today = new Date().toISOString().split('T')[0];
-    
-    const itemsToCreate = DEFAULT_CHECKLIST_ITEMS.map(item => ({
+
+    const itemsToCreate = DEFAULT_CHECKLIST_ITEMS.map((item, index) => ({
+      id: Date.now().toString() + index,
       user_id: userId,
       title: item.title,
       subtitle: item.subtitle,
@@ -137,20 +176,31 @@ const createDefaultChecklistItems = async (userId) => {
       is_custom: item.is_custom,
       sort_order: item.sort_order,
       created_date: today,
+      created_at: new Date().toISOString(),
     }));
 
-    const { data, error } = await supabase
-      .from('checklist_items')
-      .insert(itemsToCreate)
-      .select();
+    if (USE_LOCAL_STORAGE) {
+      // Local storage
+      await AsyncStorage.setItem('@bodymax:checklist_items', JSON.stringify(itemsToCreate));
+      return itemsToCreate.map(item => ({
+        ...formatChecklistItemFromDB(item),
+        is_completed: false,
+        completion_id: null,
+      }));
+    } else {
+      // Supabase
+      const { data, error } = await supabase
+        .from('checklist_items')
+        .insert(itemsToCreate)
+        .select();
 
-    if (error) throw error;
-
-    return (data || []).map(item => ({
-      ...formatChecklistItemFromDB(item),
-      is_completed: false,
-      completion_id: null,
-    }));
+      if (error) throw error;
+      return (data || []).map(item => ({
+        ...formatChecklistItemFromDB(item),
+        is_completed: false,
+        completion_id: null,
+      }));
+    }
   } catch (error) {
     console.error('Error creating default checklist items:', error);
     return [];
@@ -159,52 +209,88 @@ const createDefaultChecklistItems = async (userId) => {
 
 /**
  * Add a new checklist item
- * @param {Object} itemData - Item data
- * @returns {Promise<Object|null>} - Created item or null
  */
 export const addChecklistItem = async (itemData) => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+      userId = user.id;
+    }
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Get the highest sort order
-    const { data: existingItems } = await supabase
-      .from('checklist_items')
-      .select('sort_order')
-      .eq('user_id', user.id)
-      .order('sort_order', { ascending: false })
-      .limit(1);
+    if (USE_LOCAL_STORAGE) {
+      // Local storage
+      const itemsData = await AsyncStorage.getItem('@bodymax:checklist_items');
+      const items = itemsData ? JSON.parse(itemsData) : [];
 
-    const nextSortOrder = (existingItems?.[0]?.sort_order || 0) + 1;
+      const nextSortOrder = items.length > 0
+        ? Math.max(...items.map(i => i.sort_order || 0)) + 1
+        : 0;
 
-    const itemRecord = {
-      user_id: user.id,
-      title: itemData.title,
-      subtitle: itemData.subtitle || '',
-      icon: itemData.icon || 'checkbox',
-      icon_color: itemData.icon_color || '#E85D04',
-      is_recurring: itemData.is_recurring || false,
-      is_custom: true,
-      sort_order: nextSortOrder,
-      created_date: today,
-    };
+      const newItem = {
+        id: Date.now().toString(),
+        user_id: userId,
+        title: itemData.title,
+        subtitle: itemData.subtitle || '',
+        icon: itemData.icon || 'checkbox',
+        icon_color: itemData.icon_color || '#E85D04',
+        is_recurring: itemData.is_recurring || false,
+        is_custom: true,
+        sort_order: nextSortOrder,
+        created_date: today,
+        created_at: new Date().toISOString(),
+      };
 
-    const { data, error } = await supabase
-      .from('checklist_items')
-      .insert(itemRecord)
-      .select()
-      .single();
+      items.push(newItem);
+      await AsyncStorage.setItem('@bodymax:checklist_items', JSON.stringify(items));
 
-    if (error) throw error;
+      console.log('Checklist item added:', newItem.id);
+      return {
+        ...formatChecklistItemFromDB(newItem),
+        is_completed: false,
+        completion_id: null,
+      };
+    } else {
+      // Supabase
+      const { data: existingItems } = await supabase
+        .from('checklist_items')
+        .select('sort_order')
+        .eq('user_id', userId)
+        .order('sort_order', { ascending: false })
+        .limit(1);
 
-    console.log('Checklist item added:', data.id);
-    return {
-      ...formatChecklistItemFromDB(data),
-      is_completed: false,
-      completion_id: null,
-    };
+      const nextSortOrder = (existingItems?.[0]?.sort_order || 0) + 1;
+
+      const itemRecord = {
+        user_id: userId,
+        title: itemData.title,
+        subtitle: itemData.subtitle || '',
+        icon: itemData.icon || 'checkbox',
+        icon_color: itemData.icon_color || '#E85D04',
+        is_recurring: itemData.is_recurring || false,
+        is_custom: true,
+        sort_order: nextSortOrder,
+        created_date: today,
+      };
+
+      const { data, error } = await supabase
+        .from('checklist_items')
+        .insert(itemRecord)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      console.log('Checklist item added:', data.id);
+      return {
+        ...formatChecklistItemFromDB(data),
+        is_completed: false,
+        completion_id: null,
+      };
+    }
   } catch (error) {
     console.error('Error adding checklist item:', error);
     return null;
@@ -213,48 +299,77 @@ export const addChecklistItem = async (itemData) => {
 
 /**
  * Toggle checklist item completion for today
- * @param {string} itemId - Checklist item ID
- * @param {boolean} isCompleted - New completion status
- * @param {string|null} completionId - Existing completion record ID (if any)
- * @returns {Promise<Object|null>} - Updated completion or null
  */
 export const toggleChecklistCompletion = async (itemId, isCompleted, completionId = null) => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+      userId = user.id;
+    }
 
     const today = new Date().toISOString().split('T')[0];
 
-    if (completionId) {
-      // Update existing completion record
-      const { data, error } = await supabase
-        .from('checklist_completions')
-        .update({
-          is_completed: isCompleted,
-          completed_at: isCompleted ? new Date().toISOString() : null,
-        })
-        .eq('id', completionId)
-        .select()
-        .single();
+    if (USE_LOCAL_STORAGE) {
+      // Local storage
+      const completionsData = await AsyncStorage.getItem('@bodymax:checklist_completions');
+      let completions = completionsData ? JSON.parse(completionsData) : [];
 
-      if (error) throw error;
-      return data;
-    } else {
-      // Create new completion record
-      const { data, error } = await supabase
-        .from('checklist_completions')
-        .insert({
-          user_id: user.id,
+      if (completionId) {
+        // Update existing
+        const index = completions.findIndex(c => c.id === completionId);
+        if (index !== -1) {
+          completions[index].is_completed = isCompleted;
+          completions[index].completed_at = isCompleted ? new Date().toISOString() : null;
+          await AsyncStorage.setItem('@bodymax:checklist_completions', JSON.stringify(completions));
+          return completions[index];
+        }
+      } else {
+        // Create new
+        const newCompletion = {
+          id: Date.now().toString(),
+          user_id: userId,
           checklist_item_id: itemId,
           date: today,
           is_completed: isCompleted,
           completed_at: isCompleted ? new Date().toISOString() : null,
-        })
-        .select()
-        .single();
+        };
+        completions.push(newCompletion);
+        await AsyncStorage.setItem('@bodymax:checklist_completions', JSON.stringify(completions));
+        return newCompletion;
+      }
+    } else {
+      // Supabase
+      if (completionId) {
+        const { data, error } = await supabase
+          .from('checklist_completions')
+          .update({
+            is_completed: isCompleted,
+            completed_at: isCompleted ? new Date().toISOString() : null,
+          })
+          .eq('id', completionId)
+          .select()
+          .single();
 
-      if (error) throw error;
-      return data;
+        if (error) throw error;
+        return data;
+      } else {
+        const { data, error } = await supabase
+          .from('checklist_completions')
+          .insert({
+            user_id: userId,
+            checklist_item_id: itemId,
+            date: today,
+            is_completed: isCompleted,
+            completed_at: isCompleted ? new Date().toISOString() : null,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      }
     }
   } catch (error) {
     console.error('Error toggling checklist completion:', error);
@@ -264,27 +379,39 @@ export const toggleChecklistCompletion = async (itemId, isCompleted, completionI
 
 /**
  * Delete a checklist item
- * @param {string} itemId - Item ID
- * @returns {Promise<boolean>} - Success status
  */
 export const deleteChecklistItem = async (itemId) => {
   try {
-    // First delete all completions for this item
-    await supabase
-      .from('checklist_completions')
-      .delete()
-      .eq('checklist_item_id', itemId);
+    if (USE_LOCAL_STORAGE) {
+      // Local storage - delete from items and completions
+      const itemsData = await AsyncStorage.getItem('@bodymax:checklist_items');
+      let items = itemsData ? JSON.parse(itemsData) : [];
+      items = items.filter(i => i.id !== itemId);
+      await AsyncStorage.setItem('@bodymax:checklist_items', JSON.stringify(items));
 
-    // Then delete the item itself
-    const { error } = await supabase
-      .from('checklist_items')
-      .delete()
-      .eq('id', itemId);
+      const completionsData = await AsyncStorage.getItem('@bodymax:checklist_completions');
+      let completions = completionsData ? JSON.parse(completionsData) : [];
+      completions = completions.filter(c => c.checklist_item_id !== itemId);
+      await AsyncStorage.setItem('@bodymax:checklist_completions', JSON.stringify(completions));
 
-    if (error) throw error;
+      console.log('Checklist item deleted:', itemId);
+      return true;
+    } else {
+      // Supabase
+      await supabase
+        .from('checklist_completions')
+        .delete()
+        .eq('checklist_item_id', itemId);
 
-    console.log('Checklist item deleted:', itemId);
-    return true;
+      const { error } = await supabase
+        .from('checklist_items')
+        .delete()
+        .eq('id', itemId);
+
+      if (error) throw error;
+      console.log('Checklist item deleted:', itemId);
+      return true;
+    }
   } catch (error) {
     console.error('Error deleting checklist item:', error);
     return false;

@@ -3,13 +3,13 @@ import Constants from 'expo-constants';
 import {
   supabase,
   getSession,
-  getUserProfile,
-  upsertUserProfile,
   signOut as supabaseSignOut,
   onAuthStateChange,
   signInWithApple,
   isAppleSignInAvailable,
 } from '../services/supabase';
+import { getUserProfile, upsertUserProfile } from '../services/storage';
+import { calculateNutritionTargets } from '../utils/calorieCalculator';
 
 const AuthContext = createContext(undefined);
 
@@ -151,6 +151,13 @@ export const AuthProvider = ({ children }) => {
         profileData.age = age;
       }
 
+      // Calculate nutrition targets (calories + macros) with medium difficulty
+      if (profileData.weight_kg && profileData.height_cm && profileData.age && profileData.gender) {
+        const nutritionTargets = calculateNutritionTargets(profileData, 'medium');
+        Object.assign(profileData, nutritionTargets);
+        console.log('🔧 DEV MODE: Calculated nutrition targets:', nutritionTargets);
+      }
+
       setUser(devUser);
       setProfile(profileData);
       setSession({ user: devUser });
@@ -204,6 +211,14 @@ export const AuthProvider = ({ children }) => {
               const today = new Date();
               const age = today.getFullYear() - birthDate.getFullYear();
               profileUpdates.age = age;
+            }
+
+            // Calculate nutrition targets (calories + macros) with medium difficulty
+            const fullProfileData = { ...userProfile, ...profileUpdates, id: data.user.id };
+            if (fullProfileData.weight_kg && fullProfileData.height_cm && fullProfileData.age && fullProfileData.gender) {
+              const nutritionTargets = calculateNutritionTargets(fullProfileData, 'medium');
+              Object.assign(profileUpdates, nutritionTargets);
+              console.log('📊 Calculated nutrition targets:', nutritionTargets);
             }
 
             // Update profile with onboarding data

@@ -18,16 +18,37 @@ import ExerciseList from '../components/common/ExerciseList';
 import AddCaloriesBox from '../components/common/AddCaloriesBox';
 import CalorieMealCard from '../components/common/CalorieMealCard';
 import { getTodaysMeals, deleteMeal, getTodaysCalories } from '../services/mealStorage';
+import { useAuth } from '../context/AuthContext';
 
 const DailyScreen = () => {
   const insets = useSafeAreaInsets();
   const route = useRoute();
   const navigation = useNavigation();
+  const { profile } = useAuth();
   const initialTab = route.params?.initialTab || 'Nutrition';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [todaysMeals, setTodaysMeals] = useState([]);
   const [totalCalories, setTotalCalories] = useState(0);
   const [exerciseCalories, setExerciseCalories] = useState(0);
+  const [macrosConsumed, setMacrosConsumed] = useState({
+    protein_g: 0,
+    carbs_g: 0,
+    fats_g: 0,
+    fiber_g: 0,
+    sodium_mg: 0,
+    sugar_g: 0,
+  });
+
+  // Get nutrition targets from profile (or use defaults)
+  const dailyCalorieTarget = profile?.daily_calorie_target || 2000;
+  const macroTargets = {
+    protein_g: profile?.protein_g || 150,
+    carbs_g: profile?.carbs_g || 175,
+    fats_g: profile?.fats_g || 55,
+    fiber_g: profile?.fiber_g || 30,
+    sodium_mg: profile?.sodium_mg || 2300,
+    sugar_g: profile?.sugar_g || 50,
+  };
 
   // Update active tab if navigation params change
   useEffect(() => {
@@ -41,9 +62,30 @@ const DailyScreen = () => {
     try {
       const meals = await getTodaysMeals();
       const calories = await getTodaysCalories();
+
+      // Calculate consumed macros from meals
+      const consumedMacros = meals.reduce((acc, meal) => {
+        return {
+          protein_g: acc.protein_g + (meal.macros?.protein_g || 0),
+          carbs_g: acc.carbs_g + (meal.macros?.carbs_g || 0),
+          fats_g: acc.fats_g + (meal.macros?.fat_g || 0),
+          fiber_g: acc.fiber_g + (meal.macros?.fiber_g || 0),
+          sodium_mg: acc.sodium_mg + (meal.macros?.sodium_mg || 0),
+          sugar_g: acc.sugar_g + (meal.macros?.sugar_g || 0),
+        };
+      }, {
+        protein_g: 0,
+        carbs_g: 0,
+        fats_g: 0,
+        fiber_g: 0,
+        sodium_mg: 0,
+        sugar_g: 0,
+      });
+
       setTodaysMeals(meals);
       setTotalCalories(calories);
-      console.log('[DailyScreen] Loaded meals:', meals.length, 'Total calories:', calories);
+      setMacrosConsumed(consumedMacros);
+      console.log('[DailyScreen] Loaded meals:', meals.length, 'Total calories:', calories, 'Macros:', consumedMacros);
     } catch (error) {
       console.error('[DailyScreen] Error loading meals:', error);
     }
@@ -260,17 +302,24 @@ const DailyScreen = () => {
         {activeTab === 'Nutrition' && (
           <View>
             {/* Nutrition Carousel - Calories & Macros */}
-            <NutritionCarousel 
-              caloriesLeft={2223 - totalCalories + exerciseCalories}
+            <NutritionCarousel
+              caloriesConsumed={totalCalories}
+              dailyTarget={dailyCalorieTarget}
               bonusCalories={exerciseCalories}
-              // Primary macros
-              protein={{ value: 120, unit: 'g' }}
-              carbs={{ value: 200, unit: 'g' }}
-              fats={{ value: 65, unit: 'g' }}
-              // Secondary macros
-              fiber={{ value: 25, unit: 'g' }}
-              sodium={{ value: 2300, unit: 'mg' }}
-              sugar={{ value: 50, unit: 'g' }}
+              // Primary macros - consumed and targets
+              proteinConsumed={macrosConsumed.protein_g}
+              proteinTarget={macroTargets.protein_g}
+              carbsConsumed={macrosConsumed.carbs_g}
+              carbsTarget={macroTargets.carbs_g}
+              fatsConsumed={macrosConsumed.fats_g}
+              fatsTarget={macroTargets.fats_g}
+              // Secondary macros - consumed and targets
+              fiberConsumed={macrosConsumed.fiber_g}
+              fiberTarget={macroTargets.fiber_g}
+              sodiumConsumed={macrosConsumed.sodium_mg}
+              sodiumTarget={macroTargets.sodium_mg}
+              sugarConsumed={macrosConsumed.sugar_g}
+              sugarTarget={macroTargets.sugar_g}
             />
             
             {/* Add Calories Box */}

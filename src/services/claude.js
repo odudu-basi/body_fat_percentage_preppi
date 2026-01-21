@@ -223,6 +223,129 @@ export const analyzeBodyComposition = async (scanData) => {
   }
 };
 
+/**
+ * Generate personalized daily checklist items for body fat loss
+ * @param {Object} userData - User's onboarding data (age, gender, weight, height, fitness level, goals, etc.)
+ * @returns {Promise<Object>} - Generated checklist items
+ */
+export const generateChecklistItems = async (userData) => {
+  try {
+    console.log('[Claude] Generating checklist items for user...');
+
+    // Calculate BMI for context
+    const bmi = calculateBMI(userData.weight_kg, userData.height_cm);
+    const estimatedBF = estimateBodyFatFromBMI(bmi, userData.age, userData.gender);
+
+    const prompt = `You are a fitness and body composition expert. Generate a personalized daily checklist of 15-20 actionable habits that will help this user lose body fat over time.
+
+**USER PROFILE:**
+- Age: ${userData.age}
+- Gender: ${userData.gender}
+- Height: ${userData.height_cm} cm (${userData.height_feet}'${userData.height_inches}")
+- Weight: ${userData.weight_kg} kg (${(userData.weight_kg * 2.20462).toFixed(1)} lbs)
+- BMI: ${bmi.toFixed(1)}
+- Estimated Body Fat: ~${estimatedBF.toFixed(0)}%
+- Workout Frequency: ${userData.workout_frequency || 'Not specified'}
+- Primary Goal: Lose body fat and improve body composition
+
+**REQUIREMENTS:**
+1. Generate 15-20 specific, actionable daily habits
+2. Focus on body fat loss (diet, exercise, sleep, hydration, stress management)
+3. Make items varied - include nutrition, movement, recovery, mindset
+4. Keep items concise (3-8 words each)
+5. Personalize based on the user's current stats and fitness level
+6. Make items practical and achievable daily
+7. Include mix of: nutrition habits, exercise/movement, hydration, sleep, recovery, mindset
+
+**EXAMPLES OF GOOD CHECKLIST ITEMS:**
+- "Drink 3 liters of water"
+- "10,000 steps today"
+- "Eat protein with every meal"
+- "Sleep 7-8 hours"
+- "No eating 3 hours before bed"
+- "30 min resistance training"
+- "Track all meals in app"
+- "Morning sunlight exposure"
+- "Avoid liquid calories"
+
+Return ONLY this JSON format (no other text):
+
+{
+  "checklist_items": [
+    "item 1",
+    "item 2",
+    ...15-20 items total
+  ],
+  "personalization_notes": "Brief note on why these items suit this user"
+}`;
+
+    const requestBody = {
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    };
+
+    console.log('[Claude] Sending checklist generation request...');
+
+    const response = await fetch(CLAUDE_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[Claude] API Error:', errorData);
+      throw new Error(errorData.error?.message || 'Failed to generate checklist');
+    }
+
+    const data = await response.json();
+    const content = data.content?.[0]?.text;
+
+    console.log('[Claude] Response received:', content);
+
+    if (!content) {
+      throw new Error('No response from AI');
+    }
+
+    // Parse the JSON response
+    let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
+    const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanedContent = jsonMatch[0];
+    }
+
+    try {
+      const result = JSON.parse(cleanedContent);
+      console.log('[Claude] Generated', result.checklist_items.length, 'checklist items');
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (parseError) {
+      console.error('[Claude] JSON parse error. Raw content:', content);
+      throw new Error('Failed to parse AI response');
+    }
+  } catch (error) {
+    console.error('[Claude] Checklist generation error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to generate checklist',
+    };
+  }
+};
+
 export default {
   analyzeBodyComposition,
+  generateChecklistItems,
 };

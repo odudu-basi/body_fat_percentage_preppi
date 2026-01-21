@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -24,6 +25,56 @@ const BodyFatCostsScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
+
+  // Typewriter effect state
+  const fullTitle = "What high body fat\npercentage really\ncosts you.";
+  const [displayedTitle, setDisplayedTitle] = useState('');
+  const [titleComplete, setTitleComplete] = useState(false);
+
+  // Animation state for cost items
+  const fadeAnims = useRef(COST_ITEMS.map(() => new Animated.Value(0))).current;
+  const [showNextButton, setShowNextButton] = useState(false);
+
+  // Typewriter effect for title
+  useEffect(() => {
+    let currentIndex = 0;
+    const typingSpeed = 30; // milliseconds per character
+
+    const typeNextCharacter = () => {
+      if (currentIndex < fullTitle.length) {
+        setDisplayedTitle(fullTitle.substring(0, currentIndex + 1));
+        currentIndex++;
+        setTimeout(typeNextCharacter, typingSpeed);
+      } else {
+        setTitleComplete(true);
+      }
+    };
+
+    typeNextCharacter();
+  }, []);
+
+  // Sequential fade-in animation for cost items
+  useEffect(() => {
+    if (!titleComplete) return;
+
+    const animationDelay = 200; // milliseconds between each item
+    const animationDuration = 400; // duration of fade-in
+
+    const animations = fadeAnims.map((anim, index) => {
+      return Animated.timing(anim, {
+        toValue: 1,
+        duration: animationDuration,
+        delay: index * animationDelay,
+        useNativeDriver: true,
+      });
+    });
+
+    // Start all animations
+    Animated.stagger(animationDelay, animations).start(() => {
+      // Show next button after all animations complete
+      setShowNextButton(true);
+    });
+  }, [titleComplete]);
 
   const handleBack = () => {
     navigation.goBack();
@@ -65,12 +116,26 @@ const BodyFatCostsScreen = () => {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>What high body fat{'\n'}percentage really{'\n'}costs you.</Text>
+        <Text style={styles.title}>{displayedTitle}</Text>
 
         {/* Cost Items */}
         <View style={styles.costItemsContainer}>
           {COST_ITEMS.map((item, index) => (
-            <View key={index} style={styles.costItem}>
+            <Animated.View
+              key={index}
+              style={[
+                styles.costItem,
+                {
+                  opacity: fadeAnims[index],
+                  transform: [{
+                    translateY: fadeAnims[index].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  }],
+                },
+              ]}
+            >
               <View style={styles.costIconContainer}>
                 <Ionicons
                   name="alert-circle-outline"
@@ -79,21 +144,23 @@ const BodyFatCostsScreen = () => {
                 />
               </View>
               <Text style={styles.costItemText}>{item}</Text>
-            </View>
+            </Animated.View>
           ))}
         </View>
       </ScrollView>
 
       {/* Next Button */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <TouchableOpacity
-          style={styles.nextButton}
-          onPress={handleNext}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.nextButtonText}>Next</Text>
-        </TouchableOpacity>
-      </View>
+      {showNextButton && (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
+          <TouchableOpacity
+            style={styles.nextButton}
+            onPress={handleNext}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.nextButtonText}>Next</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };

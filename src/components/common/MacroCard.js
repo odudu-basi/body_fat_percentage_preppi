@@ -3,12 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
-const MacroItem = ({ value, unit, label, icon, iconColor }) => (
-  <View style={styles.macroItem}>
+const MacroItem = ({ value, unit, label, icon, iconColor, onPress }) => (
+  <TouchableOpacity style={styles.macroItem} onPress={onPress} activeOpacity={0.8}>
     <Text style={styles.macroValue}>{value}<Text style={styles.macroUnit}>{unit}</Text></Text>
     <Text style={styles.macroLabel}>{label}</Text>
     <View style={styles.macroRingContainer}>
@@ -17,54 +18,81 @@ const MacroItem = ({ value, unit, label, icon, iconColor }) => (
         <Ionicons name={icon} size={24} color={iconColor} />
       </View>
     </View>
-  </View>
+  </TouchableOpacity>
 );
 
-const MacroCard = ({ 
-  protein = { value: 120, unit: 'g' },
-  carbs = { value: 200, unit: 'g' },
-  fats = { value: 65, unit: 'g' },
-  // Custom labels for secondary macros
-  labels = {
-    first: 'Protein left',
-    second: 'Carbs left',
-    third: 'Fats left',
-  },
-  // Custom icons for secondary macros
+const MacroCard = ({
+  // First macro (consumed and target)
+  firstConsumed = 0,
+  firstTarget = 120,
+  firstUnit = 'g',
+  firstLabel = 'Protein',
+  // Second macro (consumed and target)
+  secondConsumed = 0,
+  secondTarget = 200,
+  secondUnit = 'g',
+  secondLabel = 'Carbs',
+  // Third macro (consumed and target)
+  thirdConsumed = 0,
+  thirdTarget = 65,
+  thirdUnit = 'g',
+  thirdLabel = 'Fats',
+  // Custom icons
   icons = {
     first: 'fitness',
     second: 'leaf',
     third: 'water',
   },
-  // Custom colors for secondary macros
+  // Custom colors
   colors = {
     first: '#E85D04',  // Orange for protein
     second: '#4CAF50', // Green for carbs
     third: '#FFC107',  // Yellow/gold for fats
   },
+  // Toggle state
+  showConsumed = false,
+  onPress,
 }) => {
+  // Calculate remaining values
+  const firstRemaining = Math.max(0, firstTarget - firstConsumed);
+  const secondRemaining = Math.max(0, secondTarget - secondConsumed);
+  const thirdRemaining = Math.max(0, thirdTarget - thirdConsumed);
+
+  // Determine display values and labels based on toggle state
+  const firstValue = showConsumed ? firstConsumed : firstRemaining;
+  const secondValue = showConsumed ? secondConsumed : secondRemaining;
+  const thirdValue = showConsumed ? thirdConsumed : thirdRemaining;
+
+  const suffix = showConsumed ? 'consumed' : 'left';
+  const firstDisplayLabel = `${firstLabel} ${suffix}`;
+  const secondDisplayLabel = `${secondLabel} ${suffix}`;
+  const thirdDisplayLabel = `${thirdLabel} ${suffix}`;
+
   return (
     <View style={styles.container}>
-      <MacroItem 
-        value={protein.value}
-        unit={protein.unit}
-        label={labels.first}
+      <MacroItem
+        value={Math.round(firstValue)}
+        unit={firstUnit}
+        label={firstDisplayLabel}
         icon={icons.first}
         iconColor={colors.first}
+        onPress={onPress}
       />
-      <MacroItem 
-        value={carbs.value}
-        unit={carbs.unit}
-        label={labels.second}
+      <MacroItem
+        value={Math.round(secondValue)}
+        unit={secondUnit}
+        label={secondDisplayLabel}
         icon={icons.second}
         iconColor={colors.second}
+        onPress={onPress}
       />
-      <MacroItem 
-        value={fats.value}
-        unit={fats.unit}
-        label={labels.third}
+      <MacroItem
+        value={Math.round(thirdValue)}
+        unit={thirdUnit}
+        label={thirdDisplayLabel}
         icon={icons.third}
         iconColor={colors.third}
+        onPress={onPress}
       />
     </View>
   );

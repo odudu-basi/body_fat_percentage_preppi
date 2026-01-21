@@ -1,4 +1,16 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
+import {
+  saveExercise as storageLayerSaveExercise,
+  getExercises as storageLayerGetExercises,
+  updateExercise as storageLayerUpdateExercise,
+  deleteExercise as storageLayerDeleteExercise,
+} from './storage';
+
+// Detect if running in Expo Go (development mode)
+const isExpoGo = Constants.appOwnership === 'expo';
+const USE_LOCAL_STORAGE = isExpoGo;
 
 // Default exercises that are created for each day
 const DEFAULT_EXERCISES = [
@@ -23,32 +35,26 @@ const DEFAULT_EXERCISES = [
 /**
  * Get today's exercises for the current user
  * If no exercises exist for today, create the default ones
- * @returns {Promise<Array>} - Array of exercise objects
  */
 export const getTodaysExercises = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      userId = user.id;
+    }
 
     const today = new Date().toISOString().split('T')[0];
-
-    // Try to get today's exercises
-    const { data, error } = await supabase
-      .from('exercise_logs')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('date', today)
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
+    const exercises = await storageLayerGetExercises(today, userId);
 
     // If no exercises for today, create the defaults
-    if (!data || data.length === 0) {
-      const defaultExercises = await createDefaultExercises(user.id, today);
+    if (!exercises || exercises.length === 0) {
+      const defaultExercises = await createDefaultExercises(userId, today);
       return defaultExercises;
     }
 
-    return data.map(formatExerciseFromDB);
+    return exercises.map(formatExerciseFromDB);
   } catch (error) {
     console.error('Error getting today\'s exercises:', error);
     return [];
@@ -57,13 +63,11 @@ export const getTodaysExercises = async () => {
 
 /**
  * Create default exercises for a user on a specific date
- * @param {string} userId - User ID
- * @param {string} date - Date string (YYYY-MM-DD)
- * @returns {Promise<Array>} - Array of created exercises
  */
 const createDefaultExercises = async (userId, date) => {
   try {
-    const exercisesToCreate = DEFAULT_EXERCISES.map(ex => ({
+    const exercisesToCreate = DEFAULT_EXERCISES.map((ex, index) => ({
+      id: Date.now().toString() + index,
       user_id: userId,
       date: date,
       title: ex.title,
@@ -73,16 +77,26 @@ const createDefaultExercises = async (userId, date) => {
       icon: ex.icon,
       is_custom: ex.is_custom,
       is_completed: false,
+      created_at: new Date().toISOString(),
     }));
 
-    const { data, error } = await supabase
-      .from('exercise_logs')
-      .insert(exercisesToCreate)
-      .select();
+    if (USE_LOCAL_STORAGE) {
+      // Local storage
+      const existingData = await AsyncStorage.getItem('@bodymax:exercise_logs');
+      const existing = existingData ? JSON.parse(existingData) : [];
+      const updated = [...exercisesToCreate, ...existing];
+      await AsyncStorage.setItem('@bodymax:exercise_logs', JSON.stringify(updated));
+      return exercisesToCreate.map(formatExerciseFromDB);
+    } else {
+      // Supabase
+      const { data, error } = await supabase
+        .from('exercise_logs')
+        .insert(exercisesToCreate)
+        .select();
 
-    if (error) throw error;
-
-    return (data || []).map(formatExerciseFromDB);
+      if (error) throw error;
+      return (data || []).map(formatExerciseFromDB);
+    }
   } catch (error) {
     console.error('Error creating default exercises:', error);
     return [];
@@ -91,18 +105,21 @@ const createDefaultExercises = async (userId, date) => {
 
 /**
  * Add a custom exercise
- * @param {Object} exerciseData - Exercise data
- * @returns {Promise<Object|null>} - Created exercise or null
+ * Uses storage abstraction layer
  */
 export const addExercise = async (exerciseData) => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    let userId = 'dev-user';
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+      userId = user.id;
+    }
 
     const today = new Date().toISOString().split('T')[0];
 
     const exerciseRecord = {
-      user_id: user.id,
+      user_id: userId,
       date: today,
       title: exerciseData.title,
       description: exerciseData.description || '',
@@ -113,16 +130,9 @@ export const addExercise = async (exerciseData) => {
       is_completed: false,
     };
 
-    const { data, error } = await supabase
-      .from('exercise_logs')
-      .insert(exerciseRecord)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    console.log('Exercise added:', data.id);
-    return formatExerciseFromDB(data);
+    const result = await storageLayerSaveExercise(exerciseRecord);
+    console.log('Exercise added:', result.id);
+    return formatExerciseFromDB(result);
   } catch (error) {
     console.error('Error adding exercise:', error);
     return null;
@@ -131,9 +141,7 @@ export const addExercise = async (exerciseData) => {
 
 /**
  * Toggle exercise completion status
- * @param {string} exerciseId - Exercise ID
- * @param {boolean} isCompleted - New completion status
- * @returns {Promise<Object|null>} - Updated exercise or null
+ * Uses storage abstraction layer
  */
 export const toggleExerciseCompletion = async (exerciseId, isCompleted) => {
   try {
@@ -142,17 +150,9 @@ export const toggleExerciseCompletion = async (exerciseId, isCompleted) => {
       completed_at: isCompleted ? new Date().toISOString() : null,
     };
 
-    const { data, error } = await supabase
-      .from('exercise_logs')
-      .update(updateData)
-      .eq('id', exerciseId)
-      .select()
-      .single();
-
-    if (error) throw error;
-
+    const result = await storageLayerUpdateExercise(exerciseId, updateData);
     console.log('Exercise toggled:', exerciseId, 'completed:', isCompleted);
-    return formatExerciseFromDB(data);
+    return formatExerciseFromDB(result);
   } catch (error) {
     console.error('Error toggling exercise:', error);
     return null;
@@ -161,20 +161,12 @@ export const toggleExerciseCompletion = async (exerciseId, isCompleted) => {
 
 /**
  * Delete an exercise
- * @param {string} exerciseId - Exercise ID
- * @returns {Promise<boolean>} - Success status
+ * Uses storage abstraction layer
  */
 export const deleteExercise = async (exerciseId) => {
   try {
-    const { error } = await supabase
-      .from('exercise_logs')
-      .delete()
-      .eq('id', exerciseId);
-
-    if (error) throw error;
-
-    console.log('Exercise deleted:', exerciseId);
-    return true;
+    const result = await storageLayerDeleteExercise(exerciseId);
+    return result.success;
   } catch (error) {
     console.error('Error deleting exercise:', error);
     return false;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,15 +8,28 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
-const DailyCalorieCard = ({ 
-  caloriesLeft = 2223, 
-  bonusCalories = 200,
-  onPress,
+const DailyCalorieCard = ({
+  caloriesConsumed = 0,
+  dailyTarget = 2000,
+  bonusCalories = 0,
 }) => {
+  const [showConsumed, setShowConsumed] = useState(false);
+
+  // Calculate calories remaining
+  const caloriesLeft = dailyTarget - caloriesConsumed + bonusCalories;
+
+  // Determine what to display based on toggle state
+  const displayValue = showConsumed ? caloriesConsumed : caloriesLeft;
+  const displayLabel = showConsumed ? 'Calories consumed' : 'Calories left';
+
+  const handlePress = () => {
+    setShowConsumed(!showConsumed);
+  };
+
   return (
-    <TouchableOpacity 
-      style={styles.container} 
-      onPress={onPress}
+    <TouchableOpacity
+      style={styles.container}
+      onPress={handlePress}
       activeOpacity={0.8}
     >
       {/* Left side - Ring with flame icon */}
@@ -31,13 +44,15 @@ const DailyCalorieCard = ({
 
       {/* Right side - Calorie Info */}
       <View style={styles.infoContainer}>
-        <Text style={styles.caloriesNumber}>{caloriesLeft.toLocaleString()}</Text>
+        <Text style={styles.caloriesNumber}>{displayValue.toLocaleString()}</Text>
         <View style={styles.labelRow}>
-          <Text style={styles.label}>Calories left</Text>
-          <View style={styles.bonusBadge}>
-            <Ionicons name="time-outline" size={14} color={Colors.dark.textPrimary} />
-            <Text style={styles.bonusText}>+{bonusCalories}</Text>
-          </View>
+          <Text style={styles.label}>{displayLabel}</Text>
+          {bonusCalories > 0 && !showConsumed && (
+            <View style={styles.bonusBadge}>
+              <Ionicons name="time-outline" size={14} color={Colors.dark.textPrimary} />
+              <Text style={styles.bonusText}>+{bonusCalories}</Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
