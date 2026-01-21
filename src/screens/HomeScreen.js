@@ -19,14 +19,14 @@ import SettingsButton from '../components/common/SettingsButton';
 import { getLatestBodyScan, deleteBodyScan } from '../services/bodyScanStorage';
 import { getTodaysCalories } from '../services/mealStorage';
 import { getTodaysBurnedCalories } from '../services/exerciseStorage';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
-
-const TARGET_CALORIES = 2223; // Daily calorie target
 
 const HomeScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { profile } = useAuth();
   const [showScanModal, setShowScanModal] = useState(false);
   const [latestScan, setLatestScan] = useState(null);
   const [totalCalories, setTotalCalories] = useState(0);
@@ -225,10 +225,10 @@ const HomeScreen = () => {
 
         {/* Calorie Card - Same as Nutrition tab */}
         <View style={styles.calorieSection}>
-          <DailyCalorieCard 
-            caloriesLeft={TARGET_CALORIES - totalCalories + exerciseCalories}
+          <DailyCalorieCard
+            caloriesConsumed={totalCalories}
+            dailyTarget={profile?.daily_calorie_target || 2000}
             bonusCalories={exerciseCalories}
-            onPress={() => navigation.navigate('Daily', { initialTab: 'Nutrition' })}
           />
         </View>
       </ScrollView>

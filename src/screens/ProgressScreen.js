@@ -315,15 +315,15 @@ const ProgressScreen = () => {
           {/* Legend */}
           <View style={styles.legendContainer}>
             <View style={styles.legendItem}>
-              <Text style={styles.legendIcon}>🍖</Text>
+              <View style={[styles.legendDot, { backgroundColor: '#5B9BD5' }]} />
               <Text style={styles.legendText}>Protein</Text>
             </View>
             <View style={styles.legendItem}>
-              <Text style={styles.legendIcon}>🌾</Text>
+              <View style={[styles.legendDot, { backgroundColor: '#F4A460' }]} />
               <Text style={styles.legendText}>Carbs</Text>
             </View>
             <View style={styles.legendItem}>
-              <Text style={styles.legendIcon}>💧</Text>
+              <View style={[styles.legendDot, { backgroundColor: '#E57373' }]} />
               <Text style={styles.legendText}>Fats</Text>
             </View>
           </View>
@@ -615,8 +615,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  legendIcon: {
-    fontSize: 14,
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     marginRight: Spacing.xs,
   },
   legendText: {

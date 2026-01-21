@@ -232,10 +232,13 @@ export const getMealsForDateRange = async (startDate, endDate) => {
     if (USE_LOCAL_STORAGE) {
       // Local storage - get all meals and filter by date range
       const meals = await storageLayerGetMeals(null, userId);
-      return meals.filter(meal => {
+      const filteredMeals = meals.filter(meal => {
         const mealDate = meal.date || new Date(meal.created_at).toISOString().split('T')[0];
         return mealDate >= startDate && mealDate <= endDate;
       }).sort((a, b) => a.date.localeCompare(b.date));
+
+      // Format meals consistently
+      return filteredMeals.map(formatMealFromDB);
     } else {
       // Supabase
       const { data, error } = await supabase

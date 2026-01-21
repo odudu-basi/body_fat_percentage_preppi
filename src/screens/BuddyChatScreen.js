@@ -25,6 +25,29 @@ const formatTime = (date) => {
   });
 };
 
+// Strip markdown formatting from text
+const stripMarkdown = (text) => {
+  if (!text) return '';
+
+  return text
+    // Remove bold (**text** or __text__)
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    // Remove italic (*text* or _text_)
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/_(.+?)_/g, '$1')
+    // Remove headers (### text)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove strikethrough (~~text~~)
+    .replace(/~~(.+?)~~/g, '$1')
+    // Remove inline code (`text`)
+    .replace(/`(.+?)`/g, '$1')
+    // Clean up any remaining asterisks
+    .replace(/\*/g, '')
+    // Clean up any remaining underscores at word boundaries
+    .replace(/\b_\b/g, '');
+};
+
 // Message Bubble Component
 const MessageBubble = ({ message, isUser, isTyping }) => {
   return (
@@ -55,7 +78,7 @@ const MessageBubble = ({ message, isUser, isTyping }) => {
               styles.messageText,
               isUser ? styles.messageTextUser : styles.messageTextAi,
             ]}>
-              {message.text}
+              {stripMarkdown(message.text)}
             </Text>
           )}
         </View>
