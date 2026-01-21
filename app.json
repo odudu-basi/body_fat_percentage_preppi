@@ -19,7 +19,12 @@
       "buildNumber": "22",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["preppi"]
+          }
+        ]
       }
     },
     "android": {
