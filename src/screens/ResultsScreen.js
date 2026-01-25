@@ -15,6 +15,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import { analyzeBodyComposition } from '../services/claude';
 import { saveBodyScan, formatScanForStorage } from '../services/bodyScanStorage';
+import { trackBodyScanStart, trackBodyScanComplete } from '../utils/analytics';
 
 // Animated Circle component
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -109,16 +110,25 @@ const ResultsScreen = ({ route, navigation }) => {
       }
 
       try {
+        // Track body scan start in Mixpanel
+        trackBodyScanStart();
+
         const result = await analyzeBodyComposition(scanData);
-        
+
         if (result.success) {
           setAnalysisResult(result.data);
-          
+
           // Save the scan to local storage
           try {
             const formattedScan = formatScanForStorage(scanData, result.data);
             await saveBodyScan(formattedScan);
             console.log('Scan saved successfully');
+
+            // Track body scan completion in Mixpanel
+            trackBodyScanComplete(
+              result.data.body_fat_estimate?.percentage || 0,
+              result.data.body_fat_estimate?.confidence_level || 'medium'
+            );
           } catch (saveError) {
             console.error('Error saving scan:', saveError);
             // Don't fail the whole flow if save fails

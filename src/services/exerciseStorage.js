@@ -6,31 +6,18 @@ import {
   getExercises as storageLayerGetExercises,
   updateExercise as storageLayerUpdateExercise,
   deleteExercise as storageLayerDeleteExercise,
+  getUserProfile,
 } from './storage';
+import { getDailyExercises } from '../constants/dailyExercises';
+import { getTodayLocalDate, getCurrentTimestamp } from '../utils/dateUtils';
 
 // Detect if running in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
-const USE_LOCAL_STORAGE = isExpoGo;
+const USE_LOCAL_STORAGE = false; // Force Supabase mode for testing
 
-// Default exercises that are created for each day
-const DEFAULT_EXERCISES = [
-  {
-    title: 'Cardio',
-    description: 'High intensity interval training to boost your metabolism and burn fat',
-    duration: '30 min',
-    calories: 320,
-    icon: 'heart',
-    is_custom: false,
-  },
-  {
-    title: 'Weight Lifting',
-    description: 'Strength training to build muscle and increase your resting metabolic rate',
-    duration: '45 min',
-    calories: 280,
-    icon: 'barbell',
-    is_custom: false,
-  },
-];
+// Race condition protection: prevent multiple simultaneous exercise creations
+let isCreatingExercises = false;
+let creationPromise = null;
 
 /**
  * Get today's exercises for the current user
@@ -38,20 +25,43 @@ const DEFAULT_EXERCISES = [
  */
 export const getTodaysExercises = async () => {
   try {
-    let userId = 'dev-user';
+    let userId = null;
     if (!USE_LOCAL_STORAGE) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
       userId = user.id;
+    } else {
+      userId = 'dev-user';
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayLocalDate();
+    console.log('[ExerciseStorage] Getting exercises for:', today, 'userId:', userId);
     const exercises = await storageLayerGetExercises(today, userId);
+    console.log('[ExerciseStorage] Found exercises:', exercises?.length || 0);
 
     // If no exercises for today, create the defaults
     if (!exercises || exercises.length === 0) {
-      const defaultExercises = await createDefaultExercises(userId, today);
-      return defaultExercises;
+      console.log('[ExerciseStorage] No exercises found, creating defaults...');
+
+      // RACE CONDITION PROTECTION: If already creating, wait for that to finish
+      if (isCreatingExercises && creationPromise) {
+        console.log('[ExerciseStorage] Already creating exercises, waiting...');
+        return await creationPromise;
+      }
+
+      // Set flag and create promise
+      isCreatingExercises = true;
+      creationPromise = createDefaultExercises(userId, today);
+
+      try {
+        const defaultExercises = await creationPromise;
+        console.log('[ExerciseStorage] Created default exercises:', defaultExercises?.length || 0);
+        return defaultExercises;
+      } finally {
+        // Reset flags after creation
+        isCreatingExercises = false;
+        creationPromise = null;
+      }
     }
 
     return exercises.map(formatExerciseFromDB);
@@ -63,22 +73,44 @@ export const getTodaysExercises = async () => {
 
 /**
  * Create default exercises for a user on a specific date
+ * Number of exercises depends on user's difficulty level:
+ * - Easy: 1 cardio + 1 weightlifting
+ * - Medium: 2 cardio + 2 weightlifting
+ * - Hard: 3 cardio + 3 weightlifting
  */
 const createDefaultExercises = async (userId, date) => {
   try {
-    const exercisesToCreate = DEFAULT_EXERCISES.map((ex, index) => ({
-      id: Date.now().toString() + index,
-      user_id: userId,
-      date: date,
-      title: ex.title,
-      description: ex.description,
-      duration: ex.duration,
-      calories: ex.calories,
-      icon: ex.icon,
-      is_custom: ex.is_custom,
-      is_completed: false,
-      created_at: new Date().toISOString(),
-    }));
+    // Get user's profile to determine difficulty level
+    const profile = await getUserProfile(userId);
+    const difficulty = profile?.difficulty || 'medium';
+    console.log('[ExerciseStorage] User difficulty level:', difficulty);
+
+    // Get today's exercises based on difficulty
+    const dailyExercises = getDailyExercises(difficulty);
+    console.log('[ExerciseStorage] getDailyExercises() returned:', dailyExercises);
+
+    const exercisesToCreate = dailyExercises.map((ex, index) => {
+      const baseExercise = {
+        user_id: userId,
+        date: date,
+        title: ex.title,
+        description: ex.description,
+        duration: ex.duration,
+        calories: ex.calories,
+        icon: ex.icon,
+        is_custom: ex.is_custom,
+        is_completed: false,
+        created_at: getCurrentTimestamp(),
+      };
+
+      // Only add ID for local storage (Supabase generates UUIDs automatically)
+      if (USE_LOCAL_STORAGE) {
+        baseExercise.id = Date.now().toString() + index;
+      }
+
+      return baseExercise;
+    });
+    console.log('[ExerciseStorage] Exercises to create:', exercisesToCreate);
 
     if (USE_LOCAL_STORAGE) {
       // Local storage
@@ -109,14 +141,16 @@ const createDefaultExercises = async (userId, date) => {
  */
 export const addExercise = async (exerciseData) => {
   try {
-    let userId = 'dev-user';
+    let userId = null;
     if (!USE_LOCAL_STORAGE) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
       userId = user.id;
+    } else {
+      userId = 'dev-user';
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayLocalDate();
 
     const exerciseRecord = {
       user_id: userId,
@@ -174,6 +208,60 @@ export const deleteExercise = async (exerciseId) => {
 };
 
 /**
+ * Delete ALL exercises for today
+ * Useful when changing difficulty level
+ */
+export const deleteAllTodaysExercises = async () => {
+  try {
+    let userId = null;
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.warn('[ExerciseStorage] No user found, cannot delete exercises');
+        return { success: false, deleted: 0 };
+      }
+      userId = user.id;
+    } else {
+      userId = 'dev-user';
+    }
+
+    const today = getTodayLocalDate();
+    console.log('[ExerciseStorage] Deleting ALL exercises for:', today, 'userId:', userId);
+
+    if (USE_LOCAL_STORAGE) {
+      // Local storage
+      const allData = await AsyncStorage.getItem('@bodymax:exercise_logs');
+      const allExercises = allData ? JSON.parse(allData) : [];
+      const remaining = allExercises.filter(ex => ex.date !== today || ex.user_id !== userId);
+      const deleted = allExercises.length - remaining.length;
+      await AsyncStorage.setItem('@bodymax:exercise_logs', JSON.stringify(remaining));
+      console.log('[ExerciseStorage] Deleted', deleted, 'exercises from local storage');
+      return { success: true, deleted };
+    } else {
+      // Supabase
+      const { data, error } = await supabase
+        .from('exercise_logs')
+        .delete()
+        .eq('user_id', userId)
+        .eq('date', today)
+        .select(); // Get deleted rows to count them
+
+      if (error) {
+        console.error('[ExerciseStorage] Error deleting exercises:', error);
+        return { success: false, deleted: 0, error };
+      }
+
+      const deleted = data?.length || 0;
+      console.log('[ExerciseStorage] Deleted', deleted, 'exercises from Supabase');
+      return { success: true, deleted };
+    }
+  } catch (error) {
+    console.error('[ExerciseStorage] Error deleting all today\'s exercises:', error);
+    return { success: false, deleted: 0, error };
+  }
+};
+
+/**
  * Get total burned calories for today (completed exercises only)
  * @returns {Promise<number>} - Total burned calories
  */
@@ -215,5 +303,6 @@ export default {
   addExercise,
   toggleExerciseCompletion,
   deleteExercise,
+  deleteAllTodaysExercises,
   getTodaysBurnedCalories,
 };

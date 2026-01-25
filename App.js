@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import Constants from 'expo-constants';
 import { useFonts } from 'expo-font';
 import {
   Inter_400Regular,
@@ -18,22 +19,15 @@ import * as SplashScreen from 'expo-splash-screen';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import Constants from 'expo-constants';
-import { SUPERWALL_API_KEY } from '@env';
 
 import SplashScreenComponent from './src/screens/SplashScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import { Colors } from './src/constants/theme';
 import { AuthProvider } from './src/context/AuthContext';
+import { SubscriptionProvider } from './src/context/SubscriptionContext';
+import { initAnalytics, trackAppOpen, trackScreenView } from './src/utils/analytics';
 
-// Dynamically import Superwall (will fail in Expo Go, which is fine)
-let Superwall = null;
-try {
-  Superwall = require('@superwall/react-native-superwall').default;
-} catch (e) {
-  console.log('Superwall not available - running in Expo Go');
-}
-
+// Check if we're in Expo Go
 const isExpoGo = Constants.appOwnership === 'expo';
 
 // Keep the splash screen visible while we fetch resources
@@ -41,6 +35,9 @@ SplashScreen.preventAutoHideAsync();
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
+  const [appReady, setAppReady] = useState(false); // NEW: Track when app is ready for native modules
+  const routeNameRef = React.useRef();
+  const navigationRef = React.useRef();
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -53,26 +50,58 @@ export default function App() {
     Rubik_700Bold,
   });
 
-  // Configure Superwall (only in production builds, not Expo Go)
+  // CRITICAL: Wait for splash to finish, THEN mark app as ready for native modules
   useEffect(() => {
-    const initializeSuperwall = async () => {
-      if (isExpoGo || !Superwall) {
-        console.log('🔧 DEV MODE: Skipping Superwall configuration (Expo Go)');
+    if (!showSplash && fontsLoaded) {
+      // Wait 2 seconds after splash finishes before allowing native modules
+      const timer = setTimeout(() => {
+        console.log('[App] ✅ App ready for native module initialization');
+        setAppReady(true);
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [showSplash, fontsLoaded]);
+
+  // Initialize Mixpanel analytics - ONLY after app is ready
+  useEffect(() => {
+    let isMounted = true;
+    let timeoutId = null;
+
+    const setupAnalytics = async () => {
+      // Wait for app to be ready
+      if (!appReady) {
         return;
       }
 
-      try {
-        await Superwall.configure(SUPERWALL_API_KEY, {
-          purchaseController: 'revenueCat',
-        });
-        console.log('📱 PRODUCTION: Superwall configured successfully');
-      } catch (error) {
-        console.error('Failed to configure Superwall:', error);
-      }
+      // CRITICAL: Add additional delay to avoid collision
+      console.log('[App] Scheduling analytics initialization in 5 seconds...');
+      timeoutId = setTimeout(async () => {
+        try {
+          console.log('[App] Initializing analytics...');
+          await initAnalytics();
+          if (isMounted) {
+            trackAppOpen();
+            console.log('[App] Analytics initialized successfully');
+          }
+        } catch (error) {
+          console.error('[App] Analytics setup error:', error);
+          // Don't crash the app if analytics fails
+        }
+      }, 5000); // Wait 5 seconds after app is ready
     };
 
-    initializeSuperwall();
-  }, []);
+    setupAnalytics();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [appReady]); // Re-run when app becomes ready
+
+  // Superwall is now configured via SuperwallProvider wrapper
 
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded) {
@@ -88,21 +117,48 @@ export default function App() {
     return null;
   }
 
+  const appContent = (
+    <AuthProvider appReady={appReady}>
+      <SubscriptionProvider appReady={appReady}>
+        <View style={styles.container} onLayout={onLayoutRootView}>
+          <StatusBar style="light" />
+          {showSplash ? (
+            <SplashScreenComponent onFinish={handleSplashFinish} />
+          ) : (
+            <NavigationContainer
+              ref={navigationRef}
+              onReady={() => {
+                routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
+              }}
+              onStateChange={() => {
+                try {
+                  const previousRouteName = routeNameRef.current;
+                  const currentRouteName = navigationRef.current?.getCurrentRoute()?.name;
+
+                  if (previousRouteName !== currentRouteName && currentRouteName) {
+                    // Track screen view in Mixpanel
+                    trackScreenView(currentRouteName);
+                  }
+
+                  // Save the current route name for next change
+                  routeNameRef.current = currentRouteName;
+                } catch (error) {
+                  console.error('[Navigation] Error tracking screen view:', error);
+                }
+              }}
+            >
+              <AppNavigator />
+            </NavigationContainer>
+          )}
+        </View>
+      </SubscriptionProvider>
+    </AuthProvider>
+  );
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <View style={styles.container} onLayout={onLayoutRootView}>
-            <StatusBar style="light" />
-            {showSplash ? (
-              <SplashScreenComponent onFinish={handleSplashFinish} />
-            ) : (
-              <NavigationContainer>
-                <AppNavigator />
-              </NavigationContainer>
-            )}
-          </View>
-        </AuthProvider>
+        {appContent}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

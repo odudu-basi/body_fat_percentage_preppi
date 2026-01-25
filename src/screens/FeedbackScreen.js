@@ -53,7 +53,7 @@ const FeedbackScreen = () => {
       setIsSubmitting(false);
       Alert.alert(
         'Thank You! 🎉',
-        'Your feedback has been submitted. We really appreciate you taking the time to help us improve BodyMax!',
+        'Your feedback has been submitted. We really appreciate you taking the time to help us improve BodyMaxx!',
         [
           {
             text: 'OK',
@@ -90,7 +90,7 @@ const FeedbackScreen = () => {
   };
 
   const handleEmailSupport = () => {
-    const subject = encodeURIComponent('BodyMax Feedback');
+    const subject = encodeURIComponent('BodyMaxx Feedback');
     const body = encodeURIComponent(`Type: ${selectedType || 'General'}\n\nFeedback:\n${feedback}`);
     Linking.openURL(`mailto:oduduabasiav@gmail.com?subject=${subject}&body=${body}`);
   };
@@ -110,7 +110,7 @@ const FeedbackScreen = () => {
         <View style={styles.header}>
           <Text style={styles.title}>Feedback</Text>
           <Text style={styles.subtitle}>
-            Help us make BodyMax better! Your feedback is incredibly valuable.
+            Help us make BodyMaxx better! Your feedback is incredibly valuable.
           </Text>
         </View>
 
@@ -205,27 +205,6 @@ const FeedbackScreen = () => {
           <TouchableOpacity onPress={handleEmailSupport} activeOpacity={0.7}>
             <Text style={styles.emailLink}>oduduabasiav@gmail.com</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Social Links */}
-        <View style={styles.socialSection}>
-          <Text style={styles.socialTitle}>Connect with us</Text>
-          <View style={styles.socialButtons}>
-            <TouchableOpacity
-              style={styles.socialButton}
-              onPress={() => Linking.openURL('https://twitter.com/bodymax')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="logo-twitter" size={24} color="#1DA1F2" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.socialButton}
-              onPress={() => Linking.openURL('https://instagram.com/bodymax')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="logo-instagram" size={24} color="#E4405F" />
-            </TouchableOpacity>
-          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -368,28 +347,6 @@ const styles = StyleSheet.create({
     fontSize: Fonts.sizes.md,
     color: Colors.dark.primary,
     marginTop: Spacing.xs,
-  },
-  socialSection: {
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
-  },
-  socialTitle: {
-    fontFamily: 'Inter_500Medium',
-    fontSize: Fonts.sizes.sm,
-    color: Colors.dark.textSecondary,
-    marginBottom: Spacing.md,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  socialButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
 

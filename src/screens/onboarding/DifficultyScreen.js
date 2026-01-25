@@ -4,37 +4,52 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
-const { width } = Dimensions.get('window');
-
-const GENDER_OPTIONS = [
-  { id: 'male', label: 'Male' },
-  { id: 'female', label: 'Female' },
-  { id: 'other', label: 'Other' },
+const DIFFICULTY_OPTIONS = [
+  {
+    id: 'easy',
+    label: 'Easy',
+    subtitle: 'Light calorie deficit, light cardio',
+    description: 'Sustainable approach with gentle deficit (~250 cal). Perfect for beginners or those who prefer a slower pace.',
+    icon: 'walk-outline',
+  },
+  {
+    id: 'medium',
+    label: 'Medium',
+    subtitle: 'Sustainable calorie deficit, medium cardio',
+    description: 'Balanced approach with moderate deficit (~500 cal). Recommended for most people seeking steady progress.',
+    icon: 'fitness-outline',
+  },
+  {
+    id: 'hard',
+    label: 'Hard',
+    subtitle: 'Intense calorie deficit, intense cardio',
+    description: 'Aggressive approach with higher deficit (~750 cal). For experienced individuals seeking faster results.',
+    icon: 'flame-outline',
+  },
 ];
 
-const GenderScreen = () => {
+const DifficultyScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
-  const [selectedGender, setSelectedGender] = useState(null);
+  const [selectedDifficulty, setSelectedDifficulty] = useState(null);
 
   const handleBack = () => {
     navigation.goBack();
   };
 
   const handleNext = () => {
-    if (selectedGender) {
-      // Navigate to birthday screen with accumulated data
-      navigation.navigate('Birthday', {
+    if (selectedDifficulty) {
+      navigation.navigate('Testimonials', {
         ...route.params,
-        gender: selectedGender,
+        difficulty: selectedDifficulty,
       });
     }
   };
@@ -43,7 +58,6 @@ const GenderScreen = () => {
     <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
       {/* Header */}
       <View style={styles.header}>
-        {/* Back Button */}
         <TouchableOpacity
           style={styles.backButton}
           onPress={handleBack}
@@ -52,14 +66,12 @@ const GenderScreen = () => {
           <Ionicons name="arrow-back" size={24} color={Colors.dark.textPrimary} />
         </TouchableOpacity>
 
-        {/* Progress Bar */}
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '33%' }]} />
+            <View style={[styles.progressBarFill, { width: '96%' }]} />
           </View>
         </View>
 
-        {/* Language Selector */}
         <View style={styles.languageSelector}>
           <Text style={styles.languageFlag}>🇺🇸</Text>
           <Text style={styles.languageCode}>EN</Text>
@@ -67,40 +79,57 @@ const GenderScreen = () => {
       </View>
 
       {/* Content */}
-      <View style={styles.content}>
-        {/* Title */}
-        <Text style={styles.title}>Select your gender</Text>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.title}>Choose your{'\n'}difficulty level</Text>
         <Text style={styles.subtitle}>
-          This will be used to predict your height potential & create your custom plan.
+          Select how aggressive you want your fat loss plan to be
         </Text>
 
-        {/* Gender Options */}
+        {/* Difficulty Options */}
         <View style={styles.optionsContainer}>
-          {GENDER_OPTIONS.map((option) => (
+          {DIFFICULTY_OPTIONS.map((option) => (
             <TouchableOpacity
               key={option.id}
               style={[
-                styles.optionButton,
-                selectedGender === option.id && styles.optionButtonSelected,
+                styles.optionCard,
+                selectedDifficulty === option.id && styles.optionCardSelected,
               ]}
-              onPress={() => setSelectedGender(option.id)}
+              onPress={() => setSelectedDifficulty(option.id)}
               activeOpacity={0.7}
             >
-              <Text
-                style={[
-                  styles.optionText,
-                  selectedGender === option.id && styles.optionTextSelected,
-                ]}
-              >
-                {option.label}
-              </Text>
+              <View style={styles.optionHeader}>
+                <View style={[
+                  styles.iconContainer,
+                  selectedDifficulty === option.id && styles.iconContainerSelected,
+                ]}>
+                  <Ionicons
+                    name={option.icon}
+                    size={28}
+                    color={selectedDifficulty === option.id ? Colors.dark.primary : Colors.dark.textSecondary}
+                  />
+                </View>
+                <View style={styles.optionTitleContainer}>
+                  <Text style={[
+                    styles.optionLabel,
+                    selectedDifficulty === option.id && styles.optionLabelSelected,
+                  ]}>
+                    {option.label}
+                  </Text>
+                  <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
+                </View>
+              </View>
+              <Text style={styles.optionDescription}>{option.description}</Text>
             </TouchableOpacity>
           ))}
         </View>
-      </View>
+      </ScrollView>
 
-      {/* Next Button (appears when selection made) */}
-      {selectedGender && (
+      {/* Next Button */}
+      {selectedDifficulty && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
           <TouchableOpacity
             style={styles.nextButton}
@@ -164,6 +193,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.xl,
   },
@@ -172,38 +203,69 @@ const styles = StyleSheet.create({
     fontSize: Fonts.sizes.xxxl,
     color: Colors.dark.textPrimary,
     marginBottom: Spacing.sm,
+    lineHeight: 42,
   },
   subtitle: {
     fontFamily: 'Inter_400Regular',
     fontSize: Fonts.sizes.md,
     color: Colors.dark.textSecondary,
     lineHeight: 24,
-    marginBottom: Spacing.xl * 2,
+    marginBottom: Spacing.xl * 1.5,
   },
   optionsContainer: {
     gap: Spacing.md,
+    paddingBottom: Spacing.xl,
   },
-  optionButton: {
-    width: '100%',
-    paddingVertical: Spacing.lg,
+  optionCard: {
     backgroundColor: Colors.dark.surface,
     borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: Spacing.lg,
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  optionButtonSelected: {
-    backgroundColor: 'rgba(242, 100, 25, 0.15)',
+  optionCardSelected: {
+    backgroundColor: 'rgba(242, 100, 25, 0.1)',
     borderColor: Colors.dark.primary,
   },
-  optionText: {
-    fontFamily: 'Rubik_600SemiBold',
-    fontSize: Fonts.sizes.lg,
-    color: Colors.dark.textPrimary,
+  optionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
   },
-  optionTextSelected: {
+  iconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  iconContainerSelected: {
+    backgroundColor: 'rgba(242, 100, 25, 0.2)',
+  },
+  optionTitleContainer: {
+    flex: 1,
+  },
+  optionLabel: {
+    fontFamily: 'Rubik_700Bold',
+    fontSize: Fonts.sizes.xl,
+    color: Colors.dark.textPrimary,
+    marginBottom: 2,
+  },
+  optionLabelSelected: {
     color: Colors.dark.primary,
+  },
+  optionSubtitle: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: Fonts.sizes.sm,
+    color: Colors.dark.textSecondary,
+  },
+  optionDescription: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: Fonts.sizes.sm,
+    color: Colors.dark.textSecondary,
+    lineHeight: 20,
   },
   footer: {
     paddingHorizontal: Spacing.lg,
@@ -223,4 +285,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default GenderScreen;
+export default DifficultyScreen;

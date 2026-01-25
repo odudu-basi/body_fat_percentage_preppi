@@ -6,10 +6,11 @@ import {
   getMeals as storageLayerGetMeals,
   deleteMeal as storageLayerDeleteMeal,
 } from './storage';
+import { getTodayLocalDate, getLocalDateString, getCurrentTimestamp } from '../utils/dateUtils';
 
 // Detect if running in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
-const USE_LOCAL_STORAGE = isExpoGo;
+const USE_LOCAL_STORAGE = false; // Force Supabase mode for testing
 
 /**
  * Save a meal log
@@ -18,11 +19,13 @@ const USE_LOCAL_STORAGE = isExpoGo;
 export const saveMeal = async (mealData) => {
   try {
     // Get current user ID
-    let userId = 'dev-user';
+    let userId = null;
     if (!USE_LOCAL_STORAGE) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
       userId = user.id;
+    } else {
+      userId = 'dev-user';
     }
 
     const now = new Date();
@@ -32,7 +35,7 @@ export const saveMeal = async (mealData) => {
       user_id: userId,
       meal_name: mealData.meal_name || 'Unknown Meal',
       meal_type: mealData.meal_time || 'snack',
-      date: now.toISOString().split('T')[0],
+      date: getLocalDateString(now),
       time: now.toTimeString().split(' ')[0],
       calories: mealData.total_calories || 0,
       protein_g: mealData.macros?.protein_g || 0,
@@ -65,11 +68,19 @@ export const saveMeal = async (mealData) => {
  */
 export const getMeals = async () => {
   try {
-    let userId = 'dev-user';
+    let userId = null;
+
+    // Always get real user ID when using Supabase
     if (!USE_LOCAL_STORAGE) {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
+      if (!user) {
+        // No authenticated user, return empty
+        return [];
+      }
       userId = user.id;
+    } else {
+      // Local storage mode (legacy)
+      userId = 'dev-user';
     }
 
     const meals = await storageLayerGetMeals(null, userId);
@@ -86,14 +97,17 @@ export const getMeals = async () => {
  */
 export const getTodaysMeals = async () => {
   try {
-    let userId = 'dev-user';
+    let userId = null;
+
     if (!USE_LOCAL_STORAGE) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
       userId = user.id;
+    } else {
+      userId = 'dev-user';
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayLocalDate();
     const meals = await storageLayerGetMeals(today, userId);
     return (meals || []).map(formatMealFromDB);
   } catch (error) {
@@ -222,18 +236,20 @@ export const getTodaysCalories = async () => {
  */
 export const getMealsForDateRange = async (startDate, endDate) => {
   try {
-    let userId = 'dev-user';
+    let userId = null;
     if (!USE_LOCAL_STORAGE) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
       userId = user.id;
+    } else {
+      userId = 'dev-user';
     }
 
     if (USE_LOCAL_STORAGE) {
       // Local storage - get all meals and filter by date range
       const meals = await storageLayerGetMeals(null, userId);
       const filteredMeals = meals.filter(meal => {
-        const mealDate = meal.date || new Date(meal.created_at).toISOString().split('T')[0];
+        const mealDate = meal.date || getLocalDateString(new Date(meal.created_at));
         return mealDate >= startDate && mealDate <= endDate;
       }).sort((a, b) => a.date.localeCompare(b.date));
 
@@ -268,12 +284,12 @@ export const getWeeklyNutritionData = async (weekStartDate) => {
     // Calculate week start (Sunday) and end (Saturday)
     const startDate = new Date(weekStartDate);
     startDate.setHours(0, 0, 0, 0);
-    
+
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + 6);
-    
-    const startDateStr = startDate.toISOString().split('T')[0];
-    const endDateStr = endDate.toISOString().split('T')[0];
+
+    const startDateStr = getLocalDateString(startDate);
+    const endDateStr = getLocalDateString(endDate);
     
     const meals = await getMealsForDateRange(startDateStr, endDateStr);
     
@@ -284,7 +300,7 @@ export const getWeeklyNutritionData = async (weekStartDate) => {
       dayDate.setDate(dayDate.getDate() + index);
       return {
         day,
-        date: dayDate.toISOString().split('T')[0],
+        date: getLocalDateString(dayDate),
         protein: 0,
         carbs: 0,
         fats: 0,

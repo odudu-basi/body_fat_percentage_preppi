@@ -1,32 +1,15 @@
 /**
  * Predefined checklist habits for body fat loss
- * Each user gets these 20 habits, and 7 random ones are shown daily
+ * Rotating pool of habits - 3 random ones are shown daily alongside 4 core checklist items
+ * Removed duplicates that are in core checklist: water, steps, sleep, cardio
  */
 
 export const BODY_FAT_LOSS_HABITS = [
-  {
-    title: "Drink 3 liters of water",
-    subtitle: "Stay hydrated throughout the day",
-    icon: "water",
-    iconColor: "#2196F3",
-  },
-  {
-    title: "Walk 10,000 steps",
-    subtitle: "Track your daily movement",
-    icon: "footsteps",
-    iconColor: "#FF9800",
-  },
   {
     title: "Eat protein with every meal",
     subtitle: "Prioritize lean protein sources",
     icon: "nutrition",
     iconColor: "#4CAF50",
-  },
-  {
-    title: "Sleep 7-8 hours",
-    subtitle: "Quality sleep for recovery",
-    icon: "moon",
-    iconColor: "#9C27B0",
   },
   {
     title: "30 min resistance training",
@@ -93,12 +76,6 @@ export const BODY_FAT_LOSS_HABITS = [
     subtitle: "Eat slowly, no distractions",
     icon: "happy",
     iconColor: "#FDD835",
-  },
-  {
-    title: "20 min cardio session",
-    subtitle: "Elevate heart rate for fat burn",
-    icon: "heart",
-    iconColor: "#E91E63",
   },
   {
     title: "Plan tomorrow's meals",

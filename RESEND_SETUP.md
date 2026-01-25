@@ -1,11 +1,11 @@
-# Resend Email Setup for BodyMax Feedback
+# Resend Email Setup for BodyMaxx Feedback
 
 ## Overview
 The feedback feature now uses Resend API to send feedback emails directly to `support@odanta.com`. Users can submit bug reports, feature requests, improvements, and general feedback through the app.
 
 ## Features Implemented
 - ✅ Send feedback emails via Resend API
-- ✅ Beautifully formatted HTML emails with BodyMax branding
+- ✅ Beautifully formatted HTML emails with BodyMaxx branding
 - ✅ Optional user confirmation emails
 - ✅ Reply-to user email for easy follow-up
 - ✅ Categorized feedback types (Bug, Feature, Improvement, Other)
@@ -40,7 +40,7 @@ const FEEDBACK_EMAIL = 'your-support@yourdomain.com';
 
 **From email address:**
 ```javascript
-from: 'BodyMax Feedback <noreply@yourdomain.com>'
+from: 'BodyMaxx Feedback <noreply@yourdomain.com>'
 ```
 
 ## Testing the Integration
@@ -69,19 +69,19 @@ npx expo start --clear
 ## Email Templates
 
 ### Feedback Email (to support@odanta.com)
-- **From:** BodyMax Feedback <noreply@odanta.com>
+- **From:** BodyMaxx Feedback <noreply@odanta.com>
 - **To:** support@odanta.com
 - **Reply-To:** User's email (if provided)
-- **Subject:** [BodyMax] {Feedback Type} - {First 50 chars of message}
+- **Subject:** [BodyMaxx] {Feedback Type} - {First 50 chars of message}
 - **Body:** HTML-formatted with:
-  - BodyMax branded header
+  - BodyMaxx branded header
   - Feedback type badge
   - Full message
   - User email (if provided)
   - Timestamp
 
 ### Confirmation Email (to user)
-- **From:** BodyMax <noreply@odanta.com>
+- **From:** BodyMaxx <noreply@odanta.com>
 - **To:** User's email
 - **Subject:** Thank you for your feedback!
 - **Body:** Friendly confirmation message

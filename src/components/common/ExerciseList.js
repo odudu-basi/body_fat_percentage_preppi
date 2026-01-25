@@ -21,6 +21,8 @@ import {
   toggleExerciseCompletion,
   deleteExercise,
 } from '../../services/exerciseStorage';
+import { CARDIO_EXERCISES, WEIGHTLIFTING_EXERCISES } from '../../constants/dailyExercises';
+import { trackExercisePress, trackExerciseToggle } from '../../utils/analytics';
 
 // Available icons for exercises
 const EXERCISE_ICONS = [
@@ -38,6 +40,8 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
   const [exercises, setExercises] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('default'); // 'default' or 'custom'
+  const [selectedDefaultExercise, setSelectedDefaultExercise] = useState(null);
   const [newExercise, setNewExercise] = useState({
     title: '',
     description: '',
@@ -46,6 +50,12 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
     icon: 'fitness',
   });
   const [saving, setSaving] = useState(false);
+
+  // Helper to determine exercise type (cardio or weightlifting)
+  const getExerciseType = (exerciseTitle) => {
+    const isCardio = CARDIO_EXERCISES.some(ex => ex.title === exerciseTitle);
+    return isCardio ? 'cardio' : 'weightlifting';
+  };
 
   // Load exercises from database
   const loadExercises = useCallback(async () => {
@@ -78,14 +88,19 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
     if (!exercise) return;
 
     const newStatus = !exercise.is_completed;
-    
+
+    // Track exercise press and toggle in Mixpanel
+    const exerciseType = getExerciseType(exercise.title);
+    trackExercisePress(exercise.title, exerciseType, exercise.is_completed);
+    trackExerciseToggle(exercise.title, exerciseType, newStatus);
+
     // Optimistic update
-    setExercises(prev => prev.map(ex => 
+    setExercises(prev => prev.map(ex =>
       ex.id === exerciseId ? { ...ex, is_completed: newStatus } : ex
     ));
 
     // Update burned calories immediately
-    const updatedExercises = exercises.map(ex => 
+    const updatedExercises = exercises.map(ex =>
       ex.id === exerciseId ? { ...ex, is_completed: newStatus } : ex
     );
     const burnedCalories = updatedExercises
@@ -99,7 +114,7 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
     const result = await toggleExerciseCompletion(exerciseId, newStatus);
     if (!result) {
       // Revert on failure
-      setExercises(prev => prev.map(ex => 
+      setExercises(prev => prev.map(ex =>
         ex.id === exerciseId ? { ...ex, is_completed: !newStatus } : ex
       ));
       Alert.alert('Error', 'Failed to update exercise. Please try again.');
@@ -137,8 +152,42 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
     );
   };
 
-  // Handle adding new exercise
-  const handleAddExercise = async () => {
+  // Handle adding default exercise
+  const handleAddDefaultExercise = async () => {
+    if (!selectedDefaultExercise) {
+      Alert.alert('Error', 'Please select an exercise.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const exerciseData = {
+        title: selectedDefaultExercise.title,
+        description: selectedDefaultExercise.description,
+        duration: selectedDefaultExercise.duration,
+        calories: selectedDefaultExercise.calories,
+        icon: selectedDefaultExercise.icon,
+      };
+
+      const result = await addExercise(exerciseData);
+      if (result) {
+        setExercises(prev => [...prev, result]);
+        setShowAddModal(false);
+        setSelectedDefaultExercise(null);
+        setActiveTab('default');
+      } else {
+        Alert.alert('Error', 'Failed to add exercise. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error adding exercise:', error);
+      Alert.alert('Error', 'Failed to add exercise. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle adding custom exercise
+  const handleAddCustomExercise = async () => {
     if (!newExercise.title.trim()) {
       Alert.alert('Error', 'Please enter an exercise name.');
       return;
@@ -163,6 +212,7 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
         setExercises(prev => [...prev, result]);
         setShowAddModal(false);
         resetNewExercise();
+        setActiveTab('default');
       } else {
         Alert.alert('Error', 'Failed to add exercise. Please try again.');
       }
@@ -171,6 +221,15 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
       Alert.alert('Error', 'Failed to add exercise. Please try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Handle save based on active tab
+  const handleSave = () => {
+    if (activeTab === 'default') {
+      handleAddDefaultExercise();
+    } else {
+      handleAddCustomExercise();
     }
   };
 
@@ -183,6 +242,16 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
       icon: 'fitness',
     });
   };
+
+  const handleCloseModal = () => {
+    setShowAddModal(false);
+    setActiveTab('default');
+    setSelectedDefaultExercise(null);
+    resetNewExercise();
+  };
+
+  // Get all available exercises
+  const allExercises = [...CARDIO_EXERCISES, ...WEIGHTLIFTING_EXERCISES];
 
   const totalCalories = exercises.reduce((sum, ex) => sum + (ex.calories || 0), 0);
   const burnedCalories = exercises
@@ -261,7 +330,7 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
         visible={showAddModal}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowAddModal(false)}
+        onRequestClose={handleCloseModal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -271,17 +340,14 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <TouchableOpacity
-                onPress={() => {
-                  setShowAddModal(false);
-                  resetNewExercise();
-                }}
+                onPress={handleCloseModal}
                 activeOpacity={0.7}
               >
                 <Text style={styles.cancelButton}>Cancel</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>Add Exercise</Text>
               <TouchableOpacity
-                onPress={handleAddExercise}
+                onPress={handleSave}
                 disabled={saving}
                 activeOpacity={0.7}
               >
@@ -293,87 +359,191 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
               </TouchableOpacity>
             </View>
 
+            {/* Tabs */}
+            <View style={styles.tabContainer}>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'default' && styles.tabActive]}
+                onPress={() => setActiveTab('default')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tabText, activeTab === 'default' && styles.tabTextActive]}>
+                  Default
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'custom' && styles.tabActive]}
+                onPress={() => setActiveTab('custom')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tabText, activeTab === 'custom' && styles.tabTextActive]}>
+                  Custom
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              {/* Exercise Name */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Exercise Name *</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g., Morning Run"
-                  placeholderTextColor={Colors.dark.textSecondary}
-                  value={newExercise.title}
-                  onChangeText={(text) => setNewExercise(prev => ({ ...prev, title: text }))}
-                />
-              </View>
+              {activeTab === 'default' ? (
+                /* Default Exercises Tab */
+                <View style={styles.defaultExercisesContainer}>
+                  <Text style={styles.sectionTitle}>Cardio Exercises</Text>
+                  <View style={styles.exerciseCardsGrid}>
+                    {CARDIO_EXERCISES.map((exercise, index) => (
+                      <TouchableOpacity
+                        key={`cardio-${index}`}
+                        style={[
+                          styles.defaultExerciseCard,
+                          selectedDefaultExercise?.title === exercise.title && styles.defaultExerciseCardSelected,
+                        ]}
+                        onPress={() => setSelectedDefaultExercise(exercise)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.exerciseCardHeader}>
+                          <Ionicons
+                            name={exercise.icon}
+                            size={24}
+                            color={selectedDefaultExercise?.title === exercise.title ? Colors.dark.primary : Colors.dark.textPrimary}
+                          />
+                          <Text style={[
+                            styles.exerciseCardCalories,
+                            selectedDefaultExercise?.title === exercise.title && styles.exerciseCardCaloriesSelected,
+                          ]}>
+                            {exercise.calories} kcal
+                          </Text>
+                        </View>
+                        <Text style={[
+                          styles.exerciseCardTitle,
+                          selectedDefaultExercise?.title === exercise.title && styles.exerciseCardTitleSelected,
+                        ]}>
+                          {exercise.title}
+                        </Text>
+                        <Text style={styles.exerciseCardDescription}>{exercise.description}</Text>
+                        <Text style={styles.exerciseCardDuration}>{exercise.duration}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-              {/* Description */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Description (optional)</Text>
-                <TextInput
-                  style={[styles.textInput, styles.textArea]}
-                  placeholder="Describe your exercise..."
-                  placeholderTextColor={Colors.dark.textSecondary}
-                  value={newExercise.description}
-                  onChangeText={(text) => setNewExercise(prev => ({ ...prev, description: text }))}
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              {/* Duration and Calories Row */}
-              <View style={styles.rowInputs}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: Spacing.sm }]}>
-                  <Text style={styles.inputLabel}>Duration</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="e.g., 30 min"
-                    placeholderTextColor={Colors.dark.textSecondary}
-                    value={newExercise.duration}
-                    onChangeText={(text) => setNewExercise(prev => ({ ...prev, duration: text }))}
-                  />
+                  <Text style={[styles.sectionTitle, { marginTop: Spacing.xl }]}>Weightlifting Exercises</Text>
+                  <View style={styles.exerciseCardsGrid}>
+                    {WEIGHTLIFTING_EXERCISES.map((exercise, index) => (
+                      <TouchableOpacity
+                        key={`weight-${index}`}
+                        style={[
+                          styles.defaultExerciseCard,
+                          selectedDefaultExercise?.title === exercise.title && styles.defaultExerciseCardSelected,
+                        ]}
+                        onPress={() => setSelectedDefaultExercise(exercise)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.exerciseCardHeader}>
+                          <Ionicons
+                            name={exercise.icon}
+                            size={24}
+                            color={selectedDefaultExercise?.title === exercise.title ? Colors.dark.primary : Colors.dark.textPrimary}
+                          />
+                          <Text style={[
+                            styles.exerciseCardCalories,
+                            selectedDefaultExercise?.title === exercise.title && styles.exerciseCardCaloriesSelected,
+                          ]}>
+                            {exercise.calories} kcal
+                          </Text>
+                        </View>
+                        <Text style={[
+                          styles.exerciseCardTitle,
+                          selectedDefaultExercise?.title === exercise.title && styles.exerciseCardTitleSelected,
+                        ]}>
+                          {exercise.title}
+                        </Text>
+                        <Text style={styles.exerciseCardDescription}>{exercise.description}</Text>
+                        <Text style={styles.exerciseCardDuration}>{exercise.duration}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-                <View style={[styles.inputGroup, { flex: 1, marginLeft: Spacing.sm }]}>
-                  <Text style={styles.inputLabel}>Calories Burned *</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="e.g., 300"
-                    placeholderTextColor={Colors.dark.textSecondary}
-                    value={newExercise.calories}
-                    onChangeText={(text) => setNewExercise(prev => ({ ...prev, calories: text.replace(/[^0-9]/g, '') }))}
-                    keyboardType="numeric"
-                  />
-                </View>
-              </View>
+              ) : (
+                /* Custom Exercise Tab */
+                <View>
+                  {/* Exercise Name */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Exercise Name *</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="e.g., Morning Run"
+                      placeholderTextColor={Colors.dark.textSecondary}
+                      value={newExercise.title}
+                      onChangeText={(text) => setNewExercise(prev => ({ ...prev, title: text }))}
+                    />
+                  </View>
 
-              {/* Icon Selection */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Icon</Text>
-                <View style={styles.iconGrid}>
-                  {EXERCISE_ICONS.map((icon) => (
-                    <TouchableOpacity
-                      key={icon.name}
-                      style={[
-                        styles.iconOption,
-                        newExercise.icon === icon.name && styles.iconOptionSelected,
-                      ]}
-                      onPress={() => setNewExercise(prev => ({ ...prev, icon: icon.name }))}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name={icon.name}
-                        size={24}
-                        color={newExercise.icon === icon.name ? Colors.dark.primary : Colors.dark.textSecondary}
+                  {/* Description */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Description (optional)</Text>
+                    <TextInput
+                      style={[styles.textInput, styles.textArea]}
+                      placeholder="Describe your exercise..."
+                      placeholderTextColor={Colors.dark.textSecondary}
+                      value={newExercise.description}
+                      onChangeText={(text) => setNewExercise(prev => ({ ...prev, description: text }))}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </View>
+
+                  {/* Duration and Calories Row */}
+                  <View style={styles.rowInputs}>
+                    <View style={[styles.inputGroup, { flex: 1, marginRight: Spacing.sm }]}>
+                      <Text style={styles.inputLabel}>Duration</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g., 30 min"
+                        placeholderTextColor={Colors.dark.textSecondary}
+                        value={newExercise.duration}
+                        onChangeText={(text) => setNewExercise(prev => ({ ...prev, duration: text }))}
                       />
-                      <Text style={[
-                        styles.iconLabel,
-                        newExercise.icon === icon.name && styles.iconLabelSelected,
-                      ]}>
-                        {icon.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                    </View>
+                    <View style={[styles.inputGroup, { flex: 1, marginLeft: Spacing.sm }]}>
+                      <Text style={styles.inputLabel}>Calories Burned *</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g., 300"
+                        placeholderTextColor={Colors.dark.textSecondary}
+                        value={newExercise.calories}
+                        onChangeText={(text) => setNewExercise(prev => ({ ...prev, calories: text.replace(/[^0-9]/g, '') }))}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Icon Selection */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Icon</Text>
+                    <View style={styles.iconGrid}>
+                      {EXERCISE_ICONS.map((icon) => (
+                        <TouchableOpacity
+                          key={icon.name}
+                          style={[
+                            styles.iconOption,
+                            newExercise.icon === icon.name && styles.iconOptionSelected,
+                          ]}
+                          onPress={() => setNewExercise(prev => ({ ...prev, icon: icon.name }))}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons
+                            name={icon.name}
+                            size={24}
+                            color={newExercise.icon === icon.name ? Colors.dark.primary : Colors.dark.textSecondary}
+                          />
+                          <Text style={[
+                            styles.iconLabel,
+                            newExercise.icon === icon.name && styles.iconLabelSelected,
+                          ]}>
+                            {icon.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
                 </View>
-              </View>
+              )}
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -567,6 +737,96 @@ const styles = StyleSheet.create({
   },
   iconLabelSelected: {
     color: Colors.dark.primary,
+  },
+
+  // Tab Styles
+  tabContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.background,
+    paddingHorizontal: Spacing.lg,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: Colors.dark.primary,
+  },
+  tabText: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textSecondary,
+  },
+  tabTextActive: {
+    fontFamily: 'Rubik_600SemiBold',
+    color: Colors.dark.primary,
+  },
+
+  // Default Exercise Cards
+  defaultExercisesContainer: {
+    paddingBottom: Spacing.xl,
+  },
+  sectionTitle: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.lg,
+    color: Colors.dark.textPrimary,
+    marginBottom: Spacing.md,
+  },
+  exerciseCardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.md,
+  },
+  defaultExerciseCard: {
+    width: '47%',
+    backgroundColor: Colors.dark.background,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  defaultExerciseCardSelected: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: 'rgba(242, 100, 25, 0.1)',
+  },
+  exerciseCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  exerciseCardCalories: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.sm,
+    color: Colors.dark.textSecondary,
+  },
+  exerciseCardCaloriesSelected: {
+    color: Colors.dark.primary,
+  },
+  exerciseCardTitle: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textPrimary,
+    marginBottom: 4,
+  },
+  exerciseCardTitleSelected: {
+    color: Colors.dark.primary,
+  },
+  exerciseCardDescription: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: Fonts.sizes.xs,
+    color: Colors.dark.textSecondary,
+    marginBottom: 4,
+    lineHeight: 16,
+  },
+  exerciseCardDuration: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: Fonts.sizes.xs,
+    color: Colors.dark.textSecondary,
   },
 });
 

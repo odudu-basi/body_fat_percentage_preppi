@@ -13,6 +13,7 @@ import {
   WorkoutFrequencyScreen,
   WaterIntakeScreen,
   BodyFatCostsScreen,
+  DifficultyScreen,
   TestimonialsScreen,
   AccuracyScreen,
   PaywallScreen,
@@ -87,6 +88,7 @@ const AuthNavigator = () => {
       <AuthStack.Screen name="WorkoutFrequency" component={WorkoutFrequencyScreen} />
       <AuthStack.Screen name="WaterIntake" component={WaterIntakeScreen} />
       <AuthStack.Screen name="BodyFatCosts" component={BodyFatCostsScreen} />
+      <AuthStack.Screen name="Difficulty" component={DifficultyScreen} />
       <AuthStack.Screen name="Testimonials" component={TestimonialsScreen} />
       <AuthStack.Screen name="Accuracy" component={AccuracyScreen} />
       <AuthStack.Screen name="Paywall" component={PaywallScreen} />

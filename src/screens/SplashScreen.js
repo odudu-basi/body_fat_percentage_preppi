@@ -92,7 +92,7 @@ const SplashScreen = ({ onFinish }) => {
             },
           ]}
         >
-          <Text style={styles.appName}>BodyMax</Text>
+          <Text style={styles.appName}>BodyMaxx</Text>
           <Text style={styles.tagline}>
             Lose body fat, and reach your highest potential
           </Text>

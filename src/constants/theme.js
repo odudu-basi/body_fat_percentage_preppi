@@ -1,5 +1,5 @@
 /**
- * Theme constants for BodyMax app
+ * Theme constants for BodyMaxx app
  * Based on design.md specifications
  */
 

@@ -8,7 +8,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
-const ExerciseCard = ({ 
+const ExerciseCard = ({
   title,
   description,
   duration,
@@ -28,26 +28,19 @@ const ExerciseCard = ({
   };
 
   return (
-    <TouchableOpacity 
-      style={styles.container} 
+    <TouchableOpacity
+      style={styles.container}
       onPress={handlePress}
       onLongPress={onLongPress}
       delayLongPress={500}
       activeOpacity={0.8}
     >
-      {/* Orange background card (peeking behind) */}
       <View style={[
-        styles.backgroundCard,
-        isChecked && styles.backgroundCardChecked
-      ]} />
-      
-      {/* Main card */}
-      <View style={[
-        styles.mainCard,
-        isChecked && styles.mainCardChecked
+        styles.card,
+        isChecked && styles.cardChecked
       ]}>
-        {/* Checkbox */}
-        <TouchableOpacity 
+        {/* Left side - Checkbox and Icon */}
+        <TouchableOpacity
           style={[
             styles.checkbox,
             isChecked && styles.checkboxChecked
@@ -60,44 +53,37 @@ const ExerciseCard = ({
           )}
         </TouchableOpacity>
 
-        {/* Left side - Icon and Info */}
-        <View style={styles.leftContent}>
-          <View style={[
-            styles.iconContainer,
-            isChecked && styles.iconContainerChecked
-          ]}>
-            <Ionicons 
-              name={icon} 
-              size={28} 
-              color={isChecked ? Colors.dark.primary : Colors.dark.textPrimary} 
-            />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={[
-              styles.title,
-              isChecked && styles.titleChecked
-            ]}>{title}</Text>
-            <Text style={styles.description} numberOfLines={2}>{description}</Text>
-            <View style={styles.durationRow}>
-              <Ionicons name="time-outline" size={14} color={Colors.dark.textSecondary} />
-              <Text style={styles.duration}>{duration}</Text>
-            </View>
-          </View>
+        <View style={[
+          styles.iconContainer,
+          isChecked && styles.iconContainerChecked
+        ]}>
+          <Ionicons
+            name={icon}
+            size={24}
+            color={isChecked ? '#4CAF50' : Colors.dark.primary}
+          />
         </View>
 
-        {/* Right side - Calories */}
-        <View style={styles.caloriesContainer}>
+        {/* Middle - Content */}
+        <View style={styles.content}>
           <Text style={[
-            styles.caloriesValue,
-            isChecked && styles.caloriesValueChecked
-          ]}>{calories}</Text>
-          <Text style={styles.caloriesLabel}>kcal</Text>
-          {isChecked && (
-            <View style={styles.burnedBadge}>
-              <Ionicons name="flame" size={12} color="#4CAF50" />
-              <Text style={styles.burnedText}>Burned</Text>
+            styles.title,
+            isChecked && styles.titleChecked
+          ]}>{title}</Text>
+          <Text style={styles.description} numberOfLines={1}>{description}</Text>
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <Ionicons name="time-outline" size={12} color={Colors.dark.textSecondary} />
+              <Text style={styles.metaText}>{duration}</Text>
             </View>
-          )}
+            <View style={styles.metaItem}>
+              <Ionicons name="flame-outline" size={12} color={isChecked ? '#4CAF50' : Colors.dark.primary} />
+              <Text style={[
+                styles.metaText,
+                isChecked && styles.metaTextChecked
+              ]}>{calories} kcal</Text>
+            </View>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -106,58 +92,39 @@ const ExerciseCard = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: Spacing.lg,
-    position: 'relative',
+    marginBottom: Spacing.md,
   },
-  backgroundCard: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    right: -8,
-    bottom: -8,
-    backgroundColor: Colors.dark.primary,
-    borderRadius: BorderRadius.lg,
-  },
-  backgroundCardChecked: {
-    backgroundColor: '#4CAF50', // Green when checked
-  },
-  mainCard: {
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: Colors.dark.surface,
     borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    paddingLeft: Spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    padding: Spacing.md,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.dark.primary,
   },
-  mainCardChecked: {
-    borderColor: 'rgba(76, 175, 80, 0.3)', // Subtle green border when checked
+  cardChecked: {
+    borderLeftColor: '#4CAF50',
+    backgroundColor: 'rgba(76, 175, 80, 0.08)',
   },
   checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: Colors.dark.textSecondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: Spacing.md,
+    marginRight: Spacing.sm,
   },
   checkboxChecked: {
     backgroundColor: '#4CAF50',
     borderColor: '#4CAF50',
   },
-  leftContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: BorderRadius.md,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(232, 93, 4, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -166,63 +133,41 @@ const styles = StyleSheet.create({
   iconContainerChecked: {
     backgroundColor: 'rgba(76, 175, 80, 0.15)',
   },
-  textContainer: {
+  content: {
     flex: 1,
   },
   title: {
-    fontFamily: 'Rubik_700Bold',
-    fontSize: Fonts.sizes.lg,
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.md,
     color: Colors.dark.textPrimary,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   titleChecked: {
     color: '#4CAF50',
   },
   description: {
     fontFamily: 'Inter_400Regular',
-    fontSize: Fonts.sizes.sm,
+    fontSize: Fonts.sizes.xs,
     color: Colors.dark.textSecondary,
-    lineHeight: 18,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  durationRow: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.md,
   },
-  duration: {
-    fontFamily: 'Inter_500Medium',
-    fontSize: Fonts.sizes.sm,
-    color: Colors.dark.textSecondary,
-    marginLeft: 4,
-  },
-  caloriesContainer: {
-    alignItems: 'flex-end',
-    marginLeft: Spacing.md,
-  },
-  caloriesValue: {
-    fontFamily: 'Rubik_700Bold',
-    fontSize: 32,
-    color: Colors.dark.primary,
-  },
-  caloriesValueChecked: {
-    color: '#4CAF50',
-  },
-  caloriesLabel: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: Fonts.sizes.sm,
-    color: Colors.dark.textSecondary,
-    marginTop: -2,
-  },
-  burnedBadge: {
+  metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    gap: 4,
   },
-  burnedText: {
+  metaText: {
     fontFamily: 'Inter_500Medium',
     fontSize: Fonts.sizes.xs,
+    color: Colors.dark.textSecondary,
+  },
+  metaTextChecked: {
     color: '#4CAF50',
-    marginLeft: 2,
   },
 });
 

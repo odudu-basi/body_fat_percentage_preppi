@@ -22,6 +22,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import { analyzeFoodPhoto } from '../services/foodAnalysis';
 import { saveMeal, updateMeal, formatMealForStorage } from '../services/mealStorage';
+import { trackMealLog } from '../utils/analytics';
 
 const { width } = Dimensions.get('window');
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -248,12 +249,12 @@ const NutritionResultsScreen = ({ route, navigation }) => {
       try {
         // Format the meal with current servings (adjusts all macros)
         const formattedMeal = formatMealForStorage(analysisResult, displayPhotoUri, servings);
-        
+
         // If calories were manually adjusted, override the calculated value
         if (calorieOverride !== null) {
           formattedMeal.total_calories = calorieOverride;
         }
-        
+
         if (isViewingExisting && existingMeal?.id) {
           // Update existing meal with new values
           await updateMeal(existingMeal.id, {
@@ -266,6 +267,13 @@ const NutritionResultsScreen = ({ route, navigation }) => {
           // Save as new meal
           await saveMeal(formattedMeal);
           console.log('Meal saved successfully');
+
+          // Track meal logging in Mixpanel
+          trackMealLog(
+            analysisResult.meal_type || 'unknown',
+            formattedMeal.total_calories,
+            !!displayPhotoUri
+          );
         }
       } catch (error) {
         console.error('Error saving/updating meal:', error);

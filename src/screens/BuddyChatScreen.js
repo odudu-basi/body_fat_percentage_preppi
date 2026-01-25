@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import { sendMessageToBuddy, getBuddyGreeting, getBuddySuggestions } from '../services/buddyChat';
+import { trackBuddyMessageSent, trackBuddySuggestionPress } from '../utils/analytics';
 
 // Format timestamp for messages
 const formatTime = (date) => {
@@ -117,7 +118,10 @@ const BuddyChatScreen = ({ route, navigation }) => {
           timestamp: new Date(),
         };
         setMessages([userMsg]);
-        
+
+        // Track Buddy message sent with suggestion
+        trackBuddyMessageSent(initialMessage.length, true);
+
         // Get Buddy's response
         setIsLoading(true);
         const response = await sendMessageToBuddy([], initialMessage);
@@ -147,6 +151,10 @@ const BuddyChatScreen = ({ route, navigation }) => {
     };
 
     const currentInput = inputText.trim();
+
+    // Track Buddy message sent in Mixpanel
+    trackBuddyMessageSent(currentInput.length, false);
+
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
 
@@ -180,6 +188,9 @@ const BuddyChatScreen = ({ route, navigation }) => {
   };
 
   const handleSuggestionPress = (suggestion) => {
+    // Track Buddy suggestion press in Mixpanel
+    trackBuddySuggestionPress(suggestion);
+
     // Remove emoji from suggestion for cleaner input
     const cleanSuggestion = suggestion.replace(/[\u{1F300}-\u{1F9FF}]/gu, '').trim();
     setInputText(cleanSuggestion);

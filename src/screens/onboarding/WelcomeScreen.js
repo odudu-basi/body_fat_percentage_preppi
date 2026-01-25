@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,27 +7,47 @@ import {
   Dimensions,
   Image,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
+import { checkProAccess } from '../../services/purchases';
 
 const { width, height } = Dimensions.get('window');
 
 const WelcomeScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(false);
 
   const handleGetStarted = () => {
     // Navigate to gender selection screen
     navigation.navigate('Gender');
   };
 
-  const handleSignIn = () => {
-    // Navigate to login screen
-    navigation.navigate('Login');
+  const handleSignIn = async () => {
+    // Check if user has subscription before navigating
+    setIsCheckingSubscription(true);
+    try {
+      const hasProAccess = await checkProAccess();
+      setIsCheckingSubscription(false);
+
+      if (hasProAccess) {
+        // User is subscribed, go directly to Login
+        navigation.navigate('Login');
+      } else {
+        // User is NOT subscribed, show paywall first
+        navigation.navigate('Paywall');
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+      setIsCheckingSubscription(false);
+      // On error, go to paywall to be safe
+      navigation.navigate('Paywall');
+    }
   };
 
   return (
@@ -44,16 +64,16 @@ const WelcomeScreen = () => {
               source={require('../../../assets/body-scan.png')}
               style={styles.scanImage}
               resizeMode="cover"
-              blurRadius={15}
+              blurRadius={40}
             />
 
             {/* Dark overlay */}
             <View style={styles.scanOverlay} />
 
-            {/* BodyMax Header - Top Left */}
+            {/* BodyMaxx Header - Top Left */}
             <View style={styles.brandHeader}>
               <Text style={styles.brandBody}>Body</Text>
-              <Text style={styles.brandMax}>Max</Text>
+              <Text style={styles.brandMax}>Maxx</Text>
             </View>
 
             {/* Centered Logo */}
@@ -116,8 +136,14 @@ const WelcomeScreen = () => {
           <TouchableOpacity
             onPress={handleSignIn}
             activeOpacity={0.7}
+            disabled={isCheckingSubscription}
+            style={styles.signInContainer}
           >
-            <Text style={styles.signInText}>You already have an account?</Text>
+            {isCheckingSubscription ? (
+              <ActivityIndicator size="small" color={Colors.dark.textSecondary} />
+            ) : (
+              <Text style={styles.signInText}>You already have an account?</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -289,6 +315,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik_700Bold',
     fontSize: Fonts.sizes.lg,
     color: '#FFFFFF',
+  },
+  signInContainer: {
+    minHeight: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   signInText: {
     fontFamily: 'Inter_400Regular',

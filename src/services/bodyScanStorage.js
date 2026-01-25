@@ -6,10 +6,11 @@ import {
   getBodyScans as storageLayerGetBodyScans,
   getLatestBodyScan as storageLayerGetLatestBodyScan,
 } from './storage';
+import { getTodayLocalDate } from '../utils/dateUtils';
 
 // Detect if running in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
-const USE_LOCAL_STORAGE = isExpoGo;
+const USE_LOCAL_STORAGE = false; // Force Supabase mode for testing
 
 /**
  * Save a body scan result
@@ -28,7 +29,7 @@ export const saveBodyScan = async (scanData) => {
     // Format data for storage
     const scanRecord = {
       user_id: userId,
-      scan_date: new Date().toISOString().split('T')[0],
+      scan_date: getTodayLocalDate(),
       body_fat_percentage: scanData.body_fat_percentage,
       confidence_level: scanData.confidence_level,
       confidence_low: scanData.confidence_low,
@@ -62,11 +63,13 @@ export const saveBodyScan = async (scanData) => {
  */
 export const getBodyScans = async () => {
   try {
-    let userId = 'dev-user';
+    let userId = null;
     if (!USE_LOCAL_STORAGE) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
       userId = user.id;
+    } else {
+      userId = 'dev-user';
     }
 
     const scans = await storageLayerGetBodyScans(userId);
@@ -203,10 +206,22 @@ export const formatScanForStorage = (scanData, analysisResult) => {
     bmi = parseFloat((scanData.weightInKg / (heightM * heightM)).toFixed(1));
   }
 
+  // Normalize confidence level to lowercase and validate
+  let confidenceLevel = analysisResult?.body_fat_estimate?.confidence_level;
+  if (confidenceLevel) {
+    confidenceLevel = confidenceLevel.toLowerCase();
+    // Ensure it's one of the valid values
+    if (!['high', 'medium', 'low'].includes(confidenceLevel)) {
+      confidenceLevel = 'medium'; // Default to medium if invalid
+    }
+  } else {
+    confidenceLevel = 'medium'; // Default if not provided
+  }
+
   return {
     // Body composition results
     body_fat_percentage: analysisResult?.body_fat_estimate?.percentage,
-    confidence_level: analysisResult?.body_fat_estimate?.confidence_level,
+    confidence_level: confidenceLevel,
     confidence_low: analysisResult?.body_fat_estimate?.confidence_range?.low,
     confidence_high: analysisResult?.body_fat_estimate?.confidence_range?.high,
     

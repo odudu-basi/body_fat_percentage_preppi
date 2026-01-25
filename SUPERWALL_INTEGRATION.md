@@ -1,20 +1,27 @@
-# Superwall Paywall Integration
+# Superwall Paywall Integration (expo-superwall)
 
 ## Overview
 Superwall is integrated to display a paywall after the onboarding flow and before sign-in. It works alongside RevenueCat for subscription management.
+
+**SDK:** `expo-superwall` (actively maintained for Expo 53+)
 
 ## Integration Details
 
 ### 1. Configuration
 **File:** `App.js`
-- Superwall is configured with API key from `.env`
+- App wrapped with `SuperwallProvider` from `expo-superwall`
+- API key from `.env`
 - Purchase controller set to `'revenueCat'` to integrate with existing RevenueCat setup
-- Initialized early in app lifecycle
 
 ```javascript
-await Superwall.configure(SUPERWALL_API_KEY, {
-  purchaseController: 'revenueCat',
-});
+<SuperwallProvider
+  apiKeys={{ ios: SUPERWALL_API_KEY }}
+  options={{
+    purchaseController: 'revenueCat',
+  }}
+>
+  {/* App content */}
+</SuperwallProvider>
 ```
 
 ### 2. Flow
@@ -32,10 +39,11 @@ await Superwall.configure(SUPERWALL_API_KEY, {
 ### 3. Paywall Screen
 **File:** `src/screens/onboarding/PaywallScreen.js`
 
-- Checks subscription status using `Superwall.getSubscriptionStatus()`
-- Presents paywall using `Superwall.register('campaign_trigger')`
-- Handles subscription state changes
-- Always navigates to Login after paywall interaction
+- Uses `usePlacement` hook from `expo-superwall`
+- Checks subscription status using RevenueCat's `checkProAccess()`
+- Presents paywall using `registerPlacement({ placement: 'campaign_trigger' })`
+- Handles subscription state changes via callbacks (onPresent, onDismiss, onError)
+- Always navigates to Login after successful subscription
 
 ### 4. Placement
 **Placement ID:** `campaign_trigger`

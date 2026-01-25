@@ -81,7 +81,7 @@ const BodyFatCostsScreen = () => {
   };
 
   const handleNext = () => {
-    navigation.navigate('Testimonials', {
+    navigation.navigate('Difficulty', {
       ...route.params,
     });
   };

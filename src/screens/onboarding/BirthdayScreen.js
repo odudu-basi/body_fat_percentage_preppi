@@ -36,7 +36,7 @@ const BirthdayScreen = () => {
   const handleNext = () => {
     const birthday = new Date(selectedYear, selectedMonth, selectedDay);
     navigation.navigate('HeightWeight', {
-      gender: route.params?.gender,
+      ...route.params,
       birthday: birthday.toISOString(),
     });
   };

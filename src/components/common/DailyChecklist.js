@@ -16,20 +16,24 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 import ChecklistItem from './ChecklistItem';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getTodaysChecklist,
   addChecklistItem,
   toggleChecklistCompletion,
   deleteChecklistItem,
 } from '../../services/checklistStorage';
+import { getTodaysExercises } from '../../services/exerciseStorage';
+import { getTodayLocalDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
 import { BODY_FAT_LOSS_HABITS } from '../../constants/checklistHabits';
+import { trackChecklistItemPress, trackChecklistToggle } from '../../utils/analytics';
 
 /**
  * Get a deterministic random selection of items based on date
- * This ensures the same 7 items are shown throughout the day
+ * This ensures the same 3 items are shown throughout the day
  */
-const getRandomItemsForToday = (items, count = 7) => {
+const getRandomItemsForToday = (items, count = 3) => {
   if (!items || items.length === 0) return [];
   if (items.length <= count) return items;
 
@@ -93,29 +97,91 @@ const DailyChecklist = () => {
   });
   const [saving, setSaving] = useState(false);
 
-  // Load checklist: predefined body fat loss habits + custom user items
+  // Save predefined habit completion status to AsyncStorage
+  const saveHabitCompletion = async (itemId, isCompleted) => {
+    try {
+      const today = getTodayLocalDate();
+      const key = `@bodymax:habit_completions_${today}`;
+      const data = await AsyncStorage.getItem(key);
+      const completions = data ? JSON.parse(data) : {};
+      completions[itemId] = isCompleted;
+      await AsyncStorage.setItem(key, JSON.stringify(completions));
+    } catch (error) {
+      console.error('Error saving habit completion:', error);
+    }
+  };
+
+  // Load predefined habit completion status from AsyncStorage
+  const loadHabitCompletions = async () => {
+    try {
+      const today = getTodayLocalDate();
+      const key = `@bodymax:habit_completions_${today}`;
+      const data = await AsyncStorage.getItem(key);
+      return data ? JSON.parse(data) : {};
+    } catch (error) {
+      console.error('Error loading habit completions:', error);
+      return {};
+    }
+  };
+
+  // Load checklist: 4 core database items + 3 random daily habits + custom user items
   const loadChecklist = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Get today's 7 random items from predefined habits
-      const todaysHabits = getRandomItemsForToday(BODY_FAT_LOSS_HABITS, 7);
+      // Load today's exercises for dynamic workout duration
+      const exercises = await getTodaysExercises();
 
-      // Get custom user items from database
-      const customItems = await getTodaysChecklist();
+      // Get today's 3 random items from predefined habits
+      const todaysHabits = getRandomItemsForToday(BODY_FAT_LOSS_HABITS, 3);
 
-      // Format predefined habits for display
-      const formattedHabits = todaysHabits.map((habit, index) => ({
-        id: `habit-${index}`,
-        title: habit.title,
-        subtitle: habit.subtitle,
-        icon: habit.icon,
-        iconColor: habit.iconColor,
-        is_completed: false,
-        is_recurring: true,
-        is_custom: false,
-        sort_order: index,
-      }));
+      // Load saved habit completions from AsyncStorage
+      const habitCompletions = await loadHabitCompletions();
+
+      // Get core database checklist items with dynamic values
+      const customItems = await getTodaysChecklist({ profile, exercises });
+
+      // Format predefined habits for display with dynamic values
+      let formattedHabits = todaysHabits.map((habit, index) => {
+        const habitId = `habit-${index}`;
+        return {
+          id: habitId,
+          title: habit.title,
+          subtitle: habit.subtitle,
+          icon: habit.icon,
+          iconColor: habit.iconColor,
+          is_completed: habitCompletions[habitId] || false, // Load saved status
+          is_recurring: true,
+          is_custom: false,
+          sort_order: index,
+        };
+      });
+
+      // Apply dynamic updates to predefined habits
+      formattedHabits = formattedHabits.map(item => {
+        // Update protein goal with user's actual target
+        if (item.title === 'Hit your protein goal' && profile?.protein_g) {
+          return {
+            ...item,
+            subtitle: `${profile.protein_g}g protein target`,
+          };
+        }
+
+        // Update workout completion with total exercise duration
+        if (item.title === 'Complete your workout' && exercises?.length > 0) {
+          const totalMinutes = exercises.reduce((total, exercise) => {
+            const match = exercise.duration?.match(/(\d+)/);
+            return total + (match ? parseInt(match[1]) : 0);
+          }, 0);
+
+          return {
+            ...item,
+            subtitle: `Hit that ${totalMinutes} min cardio`,
+          };
+        }
+
+        return item;
+      });
 
       // Merge with custom items
       const allItems = [...formattedHabits, ...customItems.map(item => ({ ...item, is_custom: true }))];
@@ -126,7 +192,7 @@ const DailyChecklist = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
     loadChecklist();
@@ -136,12 +202,16 @@ const DailyChecklist = () => {
   const handleToggleItem = async (item) => {
     const newStatus = !item.is_completed;
 
+    // Track checklist item press and toggle in Mixpanel
+    trackChecklistItemPress(item.title, item.is_completed);
+    trackChecklistToggle(item.title, newStatus);
+
     // Optimistic update
     setChecklistItems(prev => prev.map(i =>
       i.id === item.id ? { ...i, is_completed: newStatus } : i
     ));
 
-    // Only save to database if it's a custom item
+    // Save to database if it's a custom item from database
     if (item.is_custom) {
       const result = await toggleChecklistCompletion(item.id, newStatus, item.completion_id);
       if (!result) {
@@ -158,6 +228,9 @@ const DailyChecklist = () => {
           ));
         }
       }
+    } else {
+      // Save predefined habit completion to AsyncStorage
+      await saveHabitCompletion(item.id, newStatus);
     }
     // For AI-generated items, just keep the state locally (resets daily)
   };

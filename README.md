@@ -69,7 +69,7 @@ npm run android
 
 ## Storage Architecture
 
-BodyMax uses a **dual-storage system** that automatically switches between local and remote storage based on the environment.
+BodyMaxx uses a **dual-storage system** that automatically switches between local and remote storage based on the environment.
 
 ### How It Works
 

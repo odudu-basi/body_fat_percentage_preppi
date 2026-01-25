@@ -85,7 +85,7 @@ export const sendFeedbackEmail = async ({ type, message, userEmail }) => {
         </head>
         <body>
           <div class="header">
-            <h1 style="margin: 0; font-size: 24px;">BodyMax Feedback</h1>
+            <h1 style="margin: 0; font-size: 24px;">BodyMaxx Feedback</h1>
             <p style="margin: 5px 0 0 0; opacity: 0.9;">New ${typeLabel} Received</p>
           </div>
           <div class="content">
@@ -110,7 +110,7 @@ export const sendFeedbackEmail = async ({ type, message, userEmail }) => {
             <div class="value">${timestamp}</div>
           </div>
           <div class="footer">
-            Sent from BodyMax Mobile App
+            Sent from BodyMaxx Mobile App
           </div>
         </body>
       </html>
@@ -118,7 +118,7 @@ export const sendFeedbackEmail = async ({ type, message, userEmail }) => {
 
     // Plain text version for email clients that don't support HTML
     const textContent = `
-BodyMax Feedback - ${typeLabel}
+BodyMaxx Feedback - ${typeLabel}
 
 Type: ${typeLabel}
 
@@ -129,13 +129,13 @@ ${userEmail ? `User Email: ${userEmail}\n` : ''}
 Submitted: ${timestamp}
 
 ---
-Sent from BodyMax Mobile App
+Sent from BodyMaxx Mobile App
     `.trim();
 
     const emailPayload = {
-      from: 'BodyMax Feedback <onboarding@resend.dev>', // Resend's default test domain
+      from: 'BodyMaxx Feedback <onboarding@resend.dev>', // Resend's default test domain
       to: [FEEDBACK_EMAIL], // Goes to oduduabasiav@gmail.com
-      subject: `[BodyMax] ${typeLabel} - ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`,
+      subject: `[BodyMaxx] ${typeLabel} - ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`,
       html: htmlContent,
       text: textContent,
       ...(userEmail && {
@@ -232,13 +232,13 @@ export const sendConfirmationEmail = async (userEmail, feedbackType) => {
           </div>
           <div class="content">
             <p>Hi there!</p>
-            <p>We've received your ${typeLabel.toLowerCase()} and wanted to say thank you for taking the time to help us improve BodyMax.</p>
-            <p>Your feedback is incredibly valuable to us and helps make BodyMax better for everyone. Our team will review it carefully.</p>
+            <p>We've received your ${typeLabel.toLowerCase()} and wanted to say thank you for taking the time to help us improve BodyMaxx.</p>
+            <p>Your feedback is incredibly valuable to us and helps make BodyMaxx better for everyone. Our team will review it carefully.</p>
             <p>If we need any clarification or have updates, we'll reach out to this email address.</p>
             <p>Keep crushing your fitness goals! 💪</p>
             <p style="margin-top: 30px;">
               Best regards,<br>
-              <strong>The BodyMax Team</strong>
+              <strong>The BodyMaxx Team</strong>
             </p>
           </div>
         </body>
@@ -252,7 +252,7 @@ export const sendConfirmationEmail = async (userEmail, feedbackType) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'BodyMax <oduduabasiav@gmail.com>',
+        from: 'BodyMaxx <oduduabasiav@gmail.com>',
         to: [userEmail],
         subject: 'Thank you for your feedback!',
         html: htmlContent,

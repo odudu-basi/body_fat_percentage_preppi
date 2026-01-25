@@ -6,12 +6,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { supabase } from './supabase';
+import { getLocalDateString } from '../utils/dateUtils';
 
 // Detect if running in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
-const USE_LOCAL_STORAGE = isExpoGo;
+// FORCE SUPABASE MODE FOR TESTING - Set to false to always use Supabase
+const USE_LOCAL_STORAGE = false; // Changed from: isExpoGo
 
 console.log(`💾 Storage Mode: ${USE_LOCAL_STORAGE ? 'LOCAL (AsyncStorage)' : 'REMOTE (Supabase)'}`);
+console.log(`📱 Running in: ${isExpoGo ? 'Expo Go' : 'Production Build'}`);
 
 // Storage keys for AsyncStorage
 const STORAGE_KEYS = {
@@ -186,9 +189,9 @@ export const getMeals = async (date = null, userId = null) => {
 
       // Filter by date if provided
       if (date) {
-        const targetDate = new Date(date).toISOString().split('T')[0];
+        const targetDate = getLocalDateString(new Date(date));
         meals = meals.filter(meal => {
-          const mealDate = meal.date || new Date(meal.created_at).toISOString().split('T')[0];
+          const mealDate = meal.date || getLocalDateString(new Date(meal.created_at));
           return mealDate === targetDate;
         });
       }
@@ -401,11 +404,17 @@ export const updateExercise = async (exerciseId, updates) => {
         .from('exercise_logs')
         .update(updates)
         .eq('id', exerciseId)
-        .select()
-        .single();
+        .select();
 
       if (error) throw error;
-      return data;
+
+      // Check if exercise was found and updated
+      if (!data || data.length === 0) {
+        console.warn('[Storage] Exercise not found for update:', exerciseId);
+        return null;
+      }
+
+      return data[0]; // Return first result instead of using .single()
     }
   } catch (error) {
     console.error('Error updating exercise:', error);

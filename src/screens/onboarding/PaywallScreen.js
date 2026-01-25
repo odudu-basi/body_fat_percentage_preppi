@@ -4,20 +4,16 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { Colors, Fonts, Spacing } from '../../constants/theme';
+import { checkProAccess, presentPaywall } from '../../services/purchases';
+import { trackPaywallView, trackSubscriptionPurchase } from '../../utils/analytics';
 
-// Dynamically import Superwall (will fail in Expo Go, which is fine)
-let Superwall = null;
-try {
-  Superwall = require('@superwall/react-native-superwall').default;
-} catch (e) {
-  // Superwall not available - running in Expo Go
-}
-
+// Check if we're in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
 
 const PaywallScreen = () => {
@@ -27,83 +23,109 @@ const PaywallScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const checkSubscriptionAndShowPaywall = async () => {
-      try {
-        // DEVELOPMENT MODE: Skip paywall in Expo Go
-        if (isExpoGo || !Superwall) {
-          console.log('🔧 DEV MODE: Skipping paywall (Expo Go detected)');
-          navigation.navigate('Login', {
-            ...route.params,
-          });
-          return;
-        }
+    checkSubscriptionAndShowPaywall();
+  }, []);
 
-        // PRODUCTION MODE: Show Superwall paywall
-        console.log('📱 PRODUCTION: Checking subscription status...');
+  const checkSubscriptionAndShowPaywall = async () => {
+    try {
+      setIsLoading(true);
 
-        // Check if user is already subscribed
-        const subscriptionStatus = await Superwall.getSubscriptionStatus();
+      // Track paywall view
+      trackPaywallView();
 
-        if (subscriptionStatus === 'ACTIVE') {
-          // User is already subscribed, skip paywall
-          console.log('User is already subscribed, skipping paywall');
-          navigation.navigate('Login', {
-            ...route.params,
-          });
-          return;
-        }
-
-        // User is not subscribed, present paywall
-        console.log('Presenting paywall with placement: campaign_trigger');
-
-        const result = await Superwall.register('campaign_trigger', {
-          // Pass any params if needed
-        });
-
-        console.log('Paywall result:', result);
-
-        // After paywall is dismissed (either subscribed or closed)
-        // Check subscription status again
-        const newStatus = await Superwall.getSubscriptionStatus();
-
-        if (newStatus === 'ACTIVE') {
-          // User subscribed, go to login
-          console.log('User subscribed successfully');
-          navigation.navigate('Login', {
-            ...route.params,
-          });
-        } else {
-          // User dismissed without subscribing, still go to login
-          // (But they won't have access to premium features)
-          console.log('User dismissed paywall without subscribing');
-          navigation.navigate('Login', {
-            ...route.params,
-          });
-        }
-      } catch (error) {
-        console.error('Paywall error:', error);
-        // On error, still allow user to proceed
+      // DEVELOPMENT MODE: Skip paywall ONLY in Expo Go (not TestFlight/Production)
+      if (isExpoGo) {
+        console.log('🔧 DEV MODE: Skipping paywall (Expo Go detected)');
+        setIsLoading(false);
         navigation.navigate('Login', {
           ...route.params,
         });
-      } finally {
-        setIsLoading(false);
+        return;
       }
-    };
 
-    // Add a small delay to ensure Superwall is ready
-    const timer = setTimeout(() => {
-      checkSubscriptionAndShowPaywall();
-    }, 500);
+      // PRODUCTION MODE: Check subscription status using RevenueCat
+      console.log('📱 PRODUCTION: Checking subscription status via RevenueCat...');
 
-    return () => clearTimeout(timer);
-  }, []);
+      const hasProAccess = await checkProAccess();
+      console.log('[PaywallScreen] RevenueCat subscription status:', hasProAccess);
+
+      if (hasProAccess) {
+        // User is already subscribed, allow them to proceed
+        console.log('✅ User is already subscribed, proceeding to Login');
+        setIsLoading(false);
+        navigation.navigate('Login', {
+          ...route.params,
+        });
+        return;
+      }
+
+      // User is NOT subscribed - Show RevenueCat Paywall (from dashboard)
+      console.log('🔒 User is NOT subscribed. Presenting RevenueCat paywall from dashboard...');
+
+      // Present the paywall configured in RevenueCat dashboard
+      const result = await presentPaywall();
+
+      console.log('[PaywallScreen] Paywall result:', result);
+
+      if (result.cancelled) {
+        // User dismissed the paywall without purchasing
+        console.log('[PaywallScreen] User cancelled paywall');
+        // Still proceed to Login (user can access limited features)
+        navigation.navigate('Login', {
+          ...route.params,
+        });
+      } else if (result.purchased) {
+        // User made a purchase
+        console.log('[PaywallScreen] User purchased subscription!');
+        trackSubscriptionPurchase('pro_subscription', 0); // Price handled by RevenueCat
+        navigation.navigate('Login', {
+          ...route.params,
+        });
+      } else {
+        // Some other result
+        console.log('[PaywallScreen] Paywall closed, proceeding to Login');
+        navigation.navigate('Login', {
+          ...route.params,
+        });
+      }
+
+      setIsLoading(false);
+    } catch (error) {
+      console.error('[PaywallScreen] Paywall error:', error);
+      setIsLoading(false);
+
+      // On error, show retry option
+      Alert.alert(
+        'Error',
+        `There was an error loading the subscription: ${error.message || 'Unknown error'}`,
+        [
+          {
+            text: 'Retry',
+            onPress: () => checkSubscriptionAndShowPaywall(),
+          },
+          {
+            text: 'Continue Anyway',
+            onPress: () => {
+              navigation.navigate('Login', {
+                ...route.params,
+              });
+            },
+            style: 'cancel',
+          },
+        ]
+      );
+    }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.dark.primary} />
-        <Text style={styles.loadingText}>Loading...</Text>
+        {isLoading && (
+          <>
+            <ActivityIndicator size="large" color={Colors.dark.primary} />
+            <Text style={styles.loadingText}>Loading subscription...</Text>
+          </>
+        )}
       </View>
     </View>
   );
@@ -118,6 +140,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
   },
   loadingText: {
     fontFamily: 'Inter_500Medium',

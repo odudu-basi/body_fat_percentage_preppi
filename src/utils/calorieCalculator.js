@@ -154,7 +154,7 @@ export const calculateCalorieGoalWithDeficit = (tdee, difficulty = 'medium') => 
  * Calculate macro targets for high-protein fat loss diet
  *
  * @param {number} calorieGoal - Daily calorie goal
- * @returns {Object} - Macro targets in grams
+ * @returns {Object} - Macro targets in grams and milligrams
  */
 export const calculateMacroTargets = (calorieGoal) => {
   // High protein split for fat loss: 40% protein, 35% carbs, 25% fats
@@ -168,18 +168,21 @@ export const calculateMacroTargets = (calorieGoal) => {
   const carbs_g = Math.round(carbsCalories / 4);
   const fats_g = Math.round(fatsCalories / 9);
 
-  // Micronutrient targets (recommended daily values)
-  const fiber_g = 30;        // Recommended daily fiber
-  const sodium_mg = 2300;    // Recommended max sodium
-  const sugar_g = 50;        // Recommended max added sugar
+  // Micronutrient targets that scale with calorie intake
+  // Fiber: 14g per 1000 calories (FDA recommendation)
+  const fiber_g = Math.round((calorieGoal / 1000) * 14);
+
+  // Sodium and Sugar: Fixed max limits (health guidelines)
+  const sodium_mg = 2300;    // FDA recommended max sodium per day
+  const sugar_g = 50;        // WHO recommended max added sugar per day
 
   return {
     protein_g,
     carbs_g,
     fats_g,
-    fiber_g,
-    sodium_mg,
-    sugar_g,
+    fiber_g,       // Now scales: ~21g at 1500cal, ~28g at 2000cal, ~35g at 2500cal
+    sodium_mg,     // Fixed: max 2300mg regardless of calories
+    sugar_g,       // Fixed: max 50g regardless of calories
   };
 };
 
@@ -208,10 +211,20 @@ export const calculateNutritionTargets = (profile, difficulty = 'medium') => {
     macros,
   });
 
+  // Return with database-compatible field names
   return {
     daily_calorie_target: calorieGoal,
+    daily_protein_target: macros.protein_g,
+    daily_carbs_target: macros.carbs_g,
+    daily_fat_target: macros.fats_g,
+    // Keep internal fields for backward compatibility
     tdee,
-    ...macros,
+    protein_g: macros.protein_g,
+    carbs_g: macros.carbs_g,
+    fats_g: macros.fats_g,
+    fiber_g: macros.fiber_g,
+    sodium_mg: macros.sodium_mg,
+    sugar_g: macros.sugar_g,
   };
 };
 

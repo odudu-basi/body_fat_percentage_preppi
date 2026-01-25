@@ -18,7 +18,9 @@ import ExerciseList from '../components/common/ExerciseList';
 import AddCaloriesBox from '../components/common/AddCaloriesBox';
 import CalorieMealCard from '../components/common/CalorieMealCard';
 import { getTodaysMeals, deleteMeal, getTodaysCalories } from '../services/mealStorage';
+import { removeDuplicateChecklistItems } from '../services/checklistStorage';
 import { useAuth } from '../context/AuthContext';
+import { trackMealPhotoCapture, trackMealDelete } from '../utils/analytics';
 
 const DailyScreen = () => {
   const insets = useSafeAreaInsets();
@@ -56,6 +58,17 @@ const DailyScreen = () => {
       setActiveTab(route.params.initialTab);
     }
   }, [route.params?.initialTab]);
+
+  // Clean up duplicate checklist items on first mount
+  useEffect(() => {
+    const cleanupDuplicates = async () => {
+      const result = await removeDuplicateChecklistItems();
+      if (result.removed > 0) {
+        console.log(`[DailyScreen] Cleaned up ${result.removed} duplicate checklist items`);
+      }
+    };
+    cleanupDuplicates();
+  }, []);
 
   // Load today's meals when screen is focused
   const loadMeals = useCallback(async () => {
@@ -105,9 +118,17 @@ const DailyScreen = () => {
   // Handle meal deletion
   const handleDeleteMeal = async (mealId) => {
     try {
+      // Find the meal before deleting to get its info
+      const meal = todaysMeals.find(m => m.id === mealId);
+
       await deleteMeal(mealId);
       await loadMeals(); // Refresh the list
       console.log('[DailyScreen] Meal deleted:', mealId);
+
+      // Track meal deletion in Mixpanel
+      if (meal) {
+        trackMealDelete(meal.meal_type || 'unknown', meal.total_calories || 0);
+      }
     } catch (error) {
       console.error('[DailyScreen] Error deleting meal:', error);
       Alert.alert('Error', 'Failed to delete meal. Please try again.');
@@ -177,6 +198,8 @@ const DailyScreen = () => {
 
       if (!result.canceled && result.assets && result.assets[0]) {
         console.log('[DailyScreen] Navigating to NutritionResults with URI:', result.assets[0].uri);
+        // Track meal photo capture from camera
+        trackMealPhotoCapture('camera');
         navigation.navigate('NutritionResults', { photoUri: result.assets[0].uri });
       } else {
         console.log('[DailyScreen] Camera was canceled or no assets');
@@ -206,6 +229,8 @@ const DailyScreen = () => {
 
       if (!result.canceled && result.assets && result.assets[0]) {
         console.log('[DailyScreen] Navigating to NutritionResults with URI:', result.assets[0].uri);
+        // Track meal photo capture from library
+        trackMealPhotoCapture('library');
         navigation.navigate('NutritionResults', { photoUri: result.assets[0].uri });
       } else {
         console.log('[DailyScreen] Library selection was canceled or no assets');
@@ -266,7 +291,7 @@ const DailyScreen = () => {
         <Text style={styles.title}>
           <Text style={styles.titleOrange}>{headerText.orange}</Text>{headerText.rest}
         </Text>
-        <SettingsButton onPress={() => console.log('Settings pressed')} />
+        <SettingsButton onPress={() => navigation.navigate('Profile')} />
       </View>
 
       {/* Tab Chooser */}

@@ -1,5 +1,5 @@
 -- ============================================
--- BODYMAX SUPABASE DATABASE SCHEMA
+-- BODYMAXX SUPABASE DATABASE SCHEMA
 -- ============================================
 -- Run this SQL in your Supabase SQL Editor
 -- Dashboard: https://supabase.com/dashboard/project/zltkngnohnpaiowffpqc/sql
@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   
   -- Fitness goals
   fitness_goal TEXT CHECK (fitness_goal IN ('lose_weight', 'maintain_weight', 'gain_muscle', 'improve_health')),
+  difficulty TEXT CHECK (difficulty IN ('easy', 'medium', 'hard')) DEFAULT 'medium',
   daily_calorie_target INTEGER,
   daily_protein_target INTEGER,
   daily_carbs_target INTEGER,

@@ -73,11 +73,13 @@ const ScanDetailsScreen = ({ route, navigation }) => {
     : `${weight_lbs || '--'} lbs`;
 
   // Confidence display
-  const confidenceText = confidence_level 
-    ? confidence_level.charAt(0).toUpperCase() + confidence_level.slice(1) 
+  const confidenceText = confidence_level
+    ? confidence_level.charAt(0).toUpperCase() + confidence_level.slice(1)
     : 'Medium';
-  const confidenceRange = (confidence_low && confidence_high) 
-    ? `${confidence_low}% - ${confidence_high}%` 
+
+  // Calculate tolerance as +/- 3% from body fat percentage
+  const tolerance = body_fat_percentage
+    ? `± 3%`
     : null;
 
   // Images for carousel
@@ -222,8 +224,8 @@ const ScanDetailsScreen = ({ route, navigation }) => {
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Confidence Level</Text>
               <Text style={styles.infoValue}>{confidenceText}</Text>
-              {confidenceRange && (
-                <Text style={styles.infoSubtext}>Range: {confidenceRange}</Text>
+              {tolerance && (
+                <Text style={styles.infoSubtext}>Tolerance: {tolerance}</Text>
               )}
             </View>
           </View>

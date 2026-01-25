@@ -1,12 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  PanResponder,
-  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -21,7 +19,6 @@ const WaterIntakeScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const [waterLitres, setWaterLitres] = useState(2.5);
-  const sliderWidth = useRef(0);
 
   const handleBack = () => {
     navigation.goBack();
@@ -34,29 +31,13 @@ const WaterIntakeScreen = () => {
     });
   };
 
-  const updateWaterFromPosition = (position) => {
-    // Calculate percentage based on slider width
-    const percentage = Math.max(0, Math.min(1, position / sliderWidth.current));
-    // Map to 0-5 litres, rounded to nearest 0.5
-    const litres = Math.round((percentage * 5) * 2) / 2;
-    setWaterLitres(litres);
+  const handleDecrease = () => {
+    setWaterLitres(prev => Math.max(0, prev - 0.5));
   };
 
-  // PanResponder for slider interaction
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const locationX = evt.nativeEvent.locationX;
-        updateWaterFromPosition(locationX);
-      },
-      onPanResponderMove: (evt) => {
-        const locationX = evt.nativeEvent.locationX;
-        updateWaterFromPosition(locationX);
-      },
-    })
-  ).current;
+  const handleIncrease = () => {
+    setWaterLitres(prev => Math.min(5, prev + 0.5));
+  };
 
   // Calculate circle progress (0 to 1)
   const progress = waterLitres / 5;
@@ -132,24 +113,29 @@ const WaterIntakeScreen = () => {
           </View>
         </View>
 
-        {/* Slider */}
-        <View
-          style={styles.sliderContainer}
-          onLayout={(event) => {
-            sliderWidth.current = event.nativeEvent.layout.width;
-          }}
-          {...panResponder.panHandlers}
-        >
-          <View style={styles.sliderTrack}>
-            <View style={[styles.sliderFill, { width: `${progress * 100}%` }]} />
-          </View>
-          <View style={[styles.sliderThumb, { left: `${progress * 100}%` }]} />
-        </View>
+        {/* +/- Controls */}
+        <View style={styles.controlsContainer}>
+          <TouchableOpacity
+            style={[styles.controlButton, waterLitres <= 0 && styles.controlButtonDisabled]}
+            onPress={handleDecrease}
+            disabled={waterLitres <= 0}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="remove" size={32} color={waterLitres <= 0 ? Colors.dark.textSecondary : Colors.dark.textPrimary} />
+          </TouchableOpacity>
 
-        {/* Slider Labels */}
-        <View style={styles.sliderLabels}>
-          <Text style={styles.sliderLabel}>0L</Text>
-          <Text style={styles.sliderLabel}>5L</Text>
+          <View style={styles.valueDisplay}>
+            <Text style={styles.valueText}>{waterLitres.toFixed(1)}L</Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.controlButton, waterLitres >= 5 && styles.controlButtonDisabled]}
+            onPress={handleIncrease}
+            disabled={waterLitres >= 5}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="add" size={32} color={waterLitres >= 5 ? Colors.dark.textSecondary : Colors.dark.textPrimary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -249,45 +235,36 @@ const styles = StyleSheet.create({
     fontSize: 56,
     color: Colors.dark.textPrimary,
   },
-  sliderContainer: {
-    width: '100%',
-    height: 40,
-    justifyContent: 'center',
-    marginTop: Spacing.xl,
-  },
-  sliderTrack: {
-    height: 4,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  sliderFill: {
-    height: '100%',
-    backgroundColor: Colors.dark.primary,
-    borderRadius: 2,
-  },
-  sliderThumb: {
-    position: 'absolute',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    marginLeft: -16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  sliderLabels: {
+  controlsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.xl * 2,
+    gap: Spacing.xl,
   },
-  sliderLabel: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: Fonts.sizes.sm,
-    color: Colors.dark.textSecondary,
+  controlButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.dark.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.dark.primary,
+  },
+  controlButtonDisabled: {
+    borderColor: Colors.dark.surface,
+    opacity: 0.5,
+  },
+  valueDisplay: {
+    minWidth: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  valueText: {
+    fontFamily: 'Rubik_700Bold',
+    fontSize: 40,
+    color: Colors.dark.textPrimary,
   },
   footer: {
     paddingHorizontal: Spacing.lg,

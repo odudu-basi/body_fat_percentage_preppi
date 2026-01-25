@@ -20,13 +20,14 @@ import { getLatestBodyScan, deleteBodyScan } from '../services/bodyScanStorage';
 import { getTodaysCalories } from '../services/mealStorage';
 import { getTodaysBurnedCalories } from '../services/exerciseStorage';
 import { useAuth } from '../context/AuthContext';
+import { trackScanButtonPress, trackLogoPress } from '../utils/analytics';
 
 const { width } = Dimensions.get('window');
 
 const HomeScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { profile } = useAuth();
+  const { profile, user, isAuthenticated } = useAuth();
   const [showScanModal, setShowScanModal] = useState(false);
   const [latestScan, setLatestScan] = useState(null);
   const [totalCalories, setTotalCalories] = useState(0);
@@ -36,8 +37,14 @@ const HomeScreen = () => {
   useFocusEffect(
     useCallback(() => {
       const loadData = async () => {
-        console.log('HomeScreen focused - loading data...');
-        
+        // Only load data if user is authenticated
+        if (!isAuthenticated || !user) {
+          console.log('HomeScreen: User not authenticated, skipping data load');
+          return;
+        }
+
+        console.log('HomeScreen focused - loading data for user:', user.id);
+
         // Load latest scan
         const scan = await getLatestBodyScan();
         console.log('Latest scan loaded:', scan?.id || 'none');
@@ -62,7 +69,7 @@ const HomeScreen = () => {
         }
       };
       loadData();
-    }, [])
+    }, [isAuthenticated, user])
   );
 
   // Also load on initial mount
@@ -89,6 +96,7 @@ const HomeScreen = () => {
   }, []);
 
   const handleScanPress = () => {
+    trackScanButtonPress('Home');
     setShowScanModal(true);
   };
 
@@ -118,6 +126,7 @@ const HomeScreen = () => {
   };
 
   const handleLogoPress = () => {
+    trackLogoPress('Home');
     navigation.navigate('Buddy');
   };
 
@@ -137,7 +146,7 @@ const HomeScreen = () => {
           />
           <View style={styles.brandText}>
             <Text style={styles.brandBody}>Body</Text>
-            <Text style={styles.brandMax}>Max</Text>
+            <Text style={styles.brandMax}>Maxx</Text>
           </View>
         </TouchableOpacity>
         <SettingsButton onPress={() => navigation.navigate('Profile')} />

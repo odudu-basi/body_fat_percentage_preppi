@@ -44,6 +44,12 @@ const BuddyScreen = ({ navigation }) => {
       icon: '💪',
       backgroundColor: '#1565C0', // Blue for strength/muscle
     },
+    {
+      id: 4,
+      title: 'Give me advice on my relationship.',
+      icon: '❤️',
+      backgroundColor: '#D81B60', // Pink for love/relationships
+    },
   ];
 
   return (
@@ -58,7 +64,7 @@ const BuddyScreen = ({ navigation }) => {
             resizeMode="contain"
           />
         </View>
-        <SettingsButton onPress={() => console.log('Settings pressed')} />
+        <SettingsButton onPress={() => navigation.navigate('Profile')} />
       </View>
 
       <ScrollView 

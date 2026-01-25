@@ -49,7 +49,7 @@ const DailyCalorieCard = ({
           <Text style={styles.label}>{displayLabel}</Text>
           {bonusCalories > 0 && !showConsumed && (
             <View style={styles.bonusBadge}>
-              <Ionicons name="time-outline" size={14} color={Colors.dark.textPrimary} />
+              <Ionicons name="fitness-outline" size={14} color={Colors.dark.textPrimary} />
               <Text style={styles.bonusText}>+{bonusCalories}</Text>
             </View>
           )}
