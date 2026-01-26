@@ -10,22 +10,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
-const AddCaloriesBox = ({ onDescribe, onPhoto }) => {
+const AddCaloriesBox = ({ onPhoto }) => {
   const [modalVisible, setModalVisible] = useState(false);
 
   const handlePress = () => {
     console.log('[AddCaloriesBox] Opening modal');
     setModalVisible(true);
-  };
-
-  const handleDescribe = () => {
-    console.log('[AddCaloriesBox] Describe pressed, closing modal');
-    setModalVisible(false);
-    // Add small delay to ensure modal is fully closed before callback
-    setTimeout(() => {
-      console.log('[AddCaloriesBox] Calling onDescribe callback');
-      onDescribe?.();
-    }, 300);
   };
 
   const handlePhoto = () => {
@@ -65,26 +55,10 @@ const AddCaloriesBox = ({ onDescribe, onPhoto }) => {
           onPress={() => setModalVisible(false)}
         >
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>How would you like to add?</Text>
-            
-            {/* Describe Option */}
-            <TouchableOpacity 
-              style={styles.optionButton}
-              onPress={handleDescribe}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.optionIcon, { backgroundColor: 'rgba(76, 175, 80, 0.15)' }]}>
-                <Ionicons name="create-outline" size={28} color="#4CAF50" />
-              </View>
-              <View style={styles.optionTextContainer}>
-                <Text style={styles.optionTitle}>Describe</Text>
-                <Text style={styles.optionSubtitle}>Type what you ate</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color={Colors.dark.textSecondary} />
-            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Add your calories</Text>
 
             {/* Photo Option */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.optionButton}
               onPress={handlePhoto}
               activeOpacity={0.8}
@@ -100,7 +74,7 @@ const AddCaloriesBox = ({ onDescribe, onPhoto }) => {
             </TouchableOpacity>
 
             {/* Cancel Button */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.cancelButton}
               onPress={() => setModalVisible(false)}
               activeOpacity={0.7}

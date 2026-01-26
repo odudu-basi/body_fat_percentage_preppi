@@ -200,46 +200,8 @@ export const getCustomerInfo = async () => {
   }
 };
 
-/**
- * Present RevenueCat Paywall (configured in RevenueCat dashboard)
- * @param {string} offering - Optional offering identifier
- * @returns {Promise<{success: boolean, customerInfo?: Object}>}
- */
-export const presentPaywall = async (offering = null) => {
-  try {
-    if (!isInitialized) {
-      console.warn('[RevenueCat] Not initialized, cannot present paywall');
-      return { success: false, error: 'Not initialized' };
-    }
-
-    console.log('[RevenueCat] Presenting paywall...');
-
-    // Present the paywall - this will show the UI you configured in RevenueCat dashboard
-    const paywallResult = await Purchases.presentPaywall(offering ? { offering } : {});
-
-    console.log('[RevenueCat] Paywall result:', paywallResult);
-
-    // Check if user made a purchase
-    const customerInfo = await Purchases.getCustomerInfo();
-    const isPro = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
-
-    return {
-      success: true,
-      isPro,
-      customerInfo,
-      purchased: isPro,
-    };
-  } catch (error) {
-    // User cancelled or error occurred
-    if (error.userCancelled) {
-      console.log('[RevenueCat] User cancelled paywall');
-      return { success: true, cancelled: true, isPro: false };
-    }
-
-    console.error('[RevenueCat] Failed to present paywall:', error);
-    return { success: false, error };
-  }
-};
+// Note: Paywall presentation is now handled by Superwall
+// RevenueCat is used only for purchase handling and subscription management
 
 export default {
   initializePurchases,
@@ -250,6 +212,5 @@ export default {
   identifyUser,
   logoutUser,
   getCustomerInfo,
-  presentPaywall,
 };
 

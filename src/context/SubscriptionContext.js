@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import Constants from 'expo-constants';
 import {
   initializePurchases,
   checkProAccess,
@@ -6,6 +7,9 @@ import {
   getOfferings,
   purchasePackage,
 } from '../services/purchases';
+
+// Check if we're in Expo Go (development mode)
+const isExpoGo = Constants.appOwnership === 'expo';
 
 const SubscriptionContext = createContext();
 
@@ -17,16 +21,18 @@ export const useSubscription = () => {
   return context;
 };
 
-export const SubscriptionProvider = ({ children, appReady }) => {
+export const SubscriptionProvider = ({ children }) => {
   const [isPro, setIsPro] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [offerings, setOfferings] = useState([]);
 
-  // Initialize RevenueCat ONLY when app is ready (prevents crash)
+  // Initialize RevenueCat
   useEffect(() => {
-    // CRITICAL: Don't initialize until app is ready
-    if (!appReady) {
-      console.log('[SubscriptionContext] Waiting for app to be ready...');
+    // DEVELOPMENT MODE: Skip RevenueCat in Expo Go
+    if (isExpoGo) {
+      console.log('[SubscriptionContext] 🔧 DEV MODE: Skipping RevenueCat (Expo Go)');
+      setIsPro(true); // Set to true so user can access app
+      setIsLoading(false);
       return;
     }
 
@@ -35,12 +41,6 @@ export const SubscriptionProvider = ({ children, appReady }) => {
 
     const init = async () => {
       try {
-        // CRITICAL: Wait 3 seconds after appReady to avoid collision with AuthContext
-        console.log('[SubscriptionContext] Scheduling RevenueCat initialization in 3 seconds...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        if (!isMounted) return;
-
         console.log('[SubscriptionContext] Starting initialization...');
 
         // Initialize RevenueCat without userId (will create anonymous user)
@@ -106,7 +106,7 @@ export const SubscriptionProvider = ({ children, appReady }) => {
     return () => {
       isMounted = false;
     };
-  }, [appReady]); // Initialize when app becomes ready
+  }, []); // Initialize once on mount
 
   // Subscriptions are device-based, not user-based
   // RevenueCat will automatically create anonymous user IDs per device

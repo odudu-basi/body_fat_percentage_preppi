@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { supabase } from './supabase';
+import { supabase, uploadImage } from './supabase';
 import {
   saveMeal as storageLayerSaveMeal,
   getMeals as storageLayerGetMeals,
@@ -13,8 +13,51 @@ const isExpoGo = Constants.appOwnership === 'expo';
 const USE_LOCAL_STORAGE = false; // Force Supabase mode for testing
 
 /**
+ * Upload a meal image to Supabase storage
+ * @param {string} localUri - Local file URI
+ * @param {string} userId - User ID
+ * @returns {Promise<string>} - Storage path (not URL)
+ */
+const uploadMealImage = async (localUri, userId) => {
+  if (!localUri) return null;
+
+  try {
+    console.log('[Meal] Uploading image to Supabase...');
+    console.log('[Meal] Local URI:', localUri);
+    console.log('[Meal] User ID:', userId);
+
+    // Fetch the image file as ArrayBuffer (works better in React Native)
+    const response = await fetch(localUri);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    console.log('[Meal] ArrayBuffer created, size:', arrayBuffer.byteLength);
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const filename = `${userId}/meal_${timestamp}.jpg`;
+
+    // Upload to Supabase storage bucket 'meal-photos' (PUBLIC with RLS)
+    console.log('[Meal] Uploading to bucket "meal-photos", filename:', filename);
+    const uploadResult = await uploadImage('meal-photos', filename, arrayBuffer);
+    console.log('[Meal] Upload result:', uploadResult);
+
+    console.log('[Meal] Image uploaded successfully:', filename);
+    // Return path, not URL (we'll generate public URLs when reading)
+    return filename;
+  } catch (error) {
+    console.error('[Meal] Failed to upload image:', error);
+    console.error('[Meal] Error details:', error.message, error.stack);
+    // Return local URI as fallback
+    console.warn('[Meal] Falling back to local URI:', localUri);
+    return localUri;
+  }
+};
+
+/**
  * Save a meal log
- * Uses storage abstraction layer (local in dev, Supabase in production)
+ * Uploads image to Supabase storage and saves record to database
  */
 export const saveMeal = async (mealData) => {
   try {
@@ -29,6 +72,14 @@ export const saveMeal = async (mealData) => {
     }
 
     const now = new Date();
+
+    // Upload image to Supabase storage (only if not using local storage)
+    let imageUrl = mealData.photo_uri;
+    if (!USE_LOCAL_STORAGE && mealData.photo_uri) {
+      console.log('[Meal] Uploading image to Supabase storage...');
+      imageUrl = await uploadMealImage(mealData.photo_uri, userId);
+      console.log('[Meal] Image uploaded successfully');
+    }
 
     // Format data for storage
     const mealRecord = {
@@ -46,7 +97,7 @@ export const saveMeal = async (mealData) => {
       sodium_mg: mealData.macros?.sodium_mg || 0,
       servings: mealData.servings || 1,
       notes: mealData.notes || '',
-      image_path: mealData.photo_uri || null,
+      image_path: imageUrl, // Stores Supabase storage path
       ai_analysis: {
         original_analysis: mealData.original_analysis,
         ingredients: mealData.ingredients,
@@ -55,7 +106,7 @@ export const saveMeal = async (mealData) => {
     };
 
     const result = await storageLayerSaveMeal(mealRecord);
-    return formatMealFromDB(result);
+    return await formatMealFromDB(result);
   } catch (error) {
     console.error('Error saving meal:', error);
     throw error;
@@ -84,7 +135,7 @@ export const getMeals = async () => {
     }
 
     const meals = await storageLayerGetMeals(null, userId);
-    return (meals || []).map(formatMealFromDB);
+    return await Promise.all((meals || []).map(formatMealFromDB));
   } catch (error) {
     console.error('Error getting meals:', error);
     return [];
@@ -109,7 +160,7 @@ export const getTodaysMeals = async () => {
 
     const today = getTodayLocalDate();
     const meals = await storageLayerGetMeals(today, userId);
-    return (meals || []).map(formatMealFromDB);
+    return await Promise.all((meals || []).map(formatMealFromDB));
   } catch (error) {
     console.error('Error getting today\'s meals:', error);
     return [];
@@ -125,17 +176,17 @@ export const getMealById = async (mealId) => {
       // Local storage - get all meals and find by ID
       const meals = await storageLayerGetMeals();
       const meal = meals.find(m => m.id === mealId);
-      return meal ? formatMealFromDB(meal) : null;
+      return meal ? await formatMealFromDB(meal) : null;
     } else {
       // Supabase
-      const { data, error } = await supabase
+      const { data, error} = await supabase
         .from('meal_logs')
         .select('*')
         .eq('id', mealId)
         .single();
 
       if (error) throw error;
-      return data ? formatMealFromDB(data) : null;
+      return data ? await formatMealFromDB(data) : null;
     }
   } catch (error) {
     console.error('Error getting meal by ID:', error);
@@ -171,7 +222,7 @@ export const updateMeal = async (mealId, updates) => {
       meals[mealIndex] = meal;
       await AsyncStorage.setItem('@bodymax:meal_logs', JSON.stringify(meals));
       console.log('Meal updated:', mealId);
-      return formatMealFromDB(meal);
+      return await formatMealFromDB(meal);
     } else {
       // Supabase
       const updateData = {};
@@ -195,7 +246,7 @@ export const updateMeal = async (mealId, updates) => {
 
       if (error) throw error;
       console.log('Meal updated:', mealId);
-      return data ? formatMealFromDB(data) : null;
+      return data ? await formatMealFromDB(data) : null;
     }
   } catch (error) {
     console.error('Error updating meal:', error);
@@ -254,7 +305,7 @@ export const getMealsForDateRange = async (startDate, endDate) => {
       }).sort((a, b) => a.date.localeCompare(b.date));
 
       // Format meals consistently
-      return filteredMeals.map(formatMealFromDB);
+      return await Promise.all(filteredMeals.map(formatMealFromDB));
     } else {
       // Supabase
       const { data, error } = await supabase
@@ -266,7 +317,7 @@ export const getMealsForDateRange = async (startDate, endDate) => {
         .order('date', { ascending: true });
 
       if (error) throw error;
-      return (data || []).map(formatMealFromDB);
+      return await Promise.all((data || []).map(formatMealFromDB));
     }
   } catch (error) {
     console.error('Error getting meals for date range:', error);
@@ -387,7 +438,22 @@ export const formatMealForStorage = (analysisResult, photoUri, servings = 1) => 
  * @param {Object} dbRecord - Database record
  * @returns {Object} - Formatted meal for app use
  */
-const formatMealFromDB = (dbRecord) => {
+const formatMealFromDB = async (dbRecord) => {
+  // Generate public URL for meal image (only if not local URI)
+  let photoUrl = dbRecord.image_path;
+
+  if (!USE_LOCAL_STORAGE && photoUrl) {
+    try {
+      // Only generate public URL if the path doesn't start with 'file://' (local URI)
+      if (!photoUrl.startsWith('file://')) {
+        photoUrl = supabase.storage.from('meal-photos').getPublicUrl(photoUrl).data.publicUrl;
+      }
+    } catch (error) {
+      console.error('[Meal] Failed to generate public URL:', error);
+      // Keep original path as fallback
+    }
+  }
+
   return {
     id: dbRecord.id,
     meal_name: dbRecord.meal_name,
@@ -402,7 +468,7 @@ const formatMealFromDB = (dbRecord) => {
       sodium_mg: dbRecord.sodium_mg,
     },
     servings: dbRecord.servings,
-    photo_uri: dbRecord.image_path,
+    photo_uri: photoUrl, // Public URL from storage
     date: dbRecord.date,
     logged_at: dbRecord.created_at,
     notes: dbRecord.notes,

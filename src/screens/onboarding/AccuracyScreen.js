@@ -1,30 +1,69 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
+import Constants from 'expo-constants';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
+import { checkProAccess } from '../../services/purchases';
+
+// Check if we're in Expo Go (development mode)
+const isExpoGo = Constants.appOwnership === 'expo';
 
 const AccuracyScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(false);
 
   const handleBack = () => {
     navigation.goBack();
   };
 
-  const handleNext = () => {
-    // Navigate to Paywall with all onboarding data
-    navigation.navigate('Paywall', {
-      ...route.params,
-    });
+  const handleNext = async () => {
+    // DEVELOPMENT MODE: Skip paywall completely in Expo Go
+    if (isExpoGo) {
+      console.log('[AccuracyScreen] 🔧 DEV MODE: Skipping paywall check - going to Login');
+      navigation.navigate('Login', {
+        ...route.params,
+      });
+      return;
+    }
+
+    // PRODUCTION MODE: Check subscription status before navigating
+    setIsCheckingSubscription(true);
+    try {
+      const hasProAccess = await checkProAccess();
+      setIsCheckingSubscription(false);
+
+      if (hasProAccess) {
+        // User already subscribed, skip paywall and go to Login
+        console.log('[AccuracyScreen] User subscribed - skipping paywall');
+        navigation.navigate('Login', {
+          ...route.params,
+        });
+      } else {
+        // User not subscribed, show paywall
+        console.log('[AccuracyScreen] User not subscribed - showing paywall');
+        navigation.navigate('Paywall', {
+          ...route.params,
+        });
+      }
+    } catch (error) {
+      console.error('[AccuracyScreen] Error checking subscription:', error);
+      setIsCheckingSubscription(false);
+      // On error, show paywall to be safe
+      navigation.navigate('Paywall', {
+        ...route.params,
+      });
+    }
   };
 
   return (
@@ -91,11 +130,16 @@ const AccuracyScreen = () => {
       {/* Next Button */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         <TouchableOpacity
-          style={styles.nextButton}
+          style={[styles.nextButton, isCheckingSubscription && styles.nextButtonDisabled]}
           onPress={handleNext}
           activeOpacity={0.8}
+          disabled={isCheckingSubscription}
         >
-          <Text style={styles.nextButtonText}>Next</Text>
+          {isCheckingSubscription ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.nextButtonText}>Next</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -244,6 +288,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik_700Bold',
     fontSize: Fonts.sizes.lg,
     color: '#FFFFFF',
+  },
+  nextButtonDisabled: {
+    opacity: 0.6,
   },
 });
 

@@ -13,10 +13,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
 /**
+ * Parse date-only string (YYYY-MM-DD) in local timezone
+ * Avoids timezone conversion issues when using new Date()
+ */
+const parseDateLocal = (dateString) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+/**
  * Format date to display day name (e.g., "Thursday")
  */
 const getDayName = (dateString) => {
-  const date = new Date(dateString);
+  const date = parseDateLocal(dateString);
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return days[date.getDay()];
 };
@@ -25,7 +34,7 @@ const getDayName = (dateString) => {
  * Format date to display full date (e.g., "18th February, 2025")
  */
 const getFormattedDate = (dateString) => {
-  const date = new Date(dateString);
+  const date = parseDateLocal(dateString);
   const day = date.getDate();
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -142,10 +151,12 @@ const BodyScanCard = ({
         {/* Left side - Torso image thumbnail */}
         <View style={styles.imageContainer}>
           {front_image_path ? (
-            <Image 
-              source={{ uri: front_image_path }} 
+            <Image
+              source={{ uri: front_image_path }}
               style={styles.torsoImage}
               resizeMode="cover"
+              onError={(error) => console.error('[BodyScanCard] Image load error:', error.nativeEvent.error, 'URI:', front_image_path)}
+              onLoad={() => console.log('[BodyScanCard] Image loaded successfully:', front_image_path)}
             />
           ) : (
             <View style={styles.placeholderImage}>

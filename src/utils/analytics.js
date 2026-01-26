@@ -1,40 +1,37 @@
 /**
  * Analytics & Tracking Service (Mixpanel)
  * Centralized event tracking for app analytics
- *
- * IMPORTANT: ANALYTICS COMPLETELY DISABLED FOR TESTING
- * All functions are no-ops to test if Mixpanel is causing crashes
  */
 
 import Constants from 'expo-constants';
 
-// ANALYTICS DISABLED - All imports and initialization commented out for testing
-const ANALYTICS_DISABLED = true;
+// ANALYTICS ENABLED
+const ANALYTICS_DISABLED = false;
 
 // Safely import MIXPANEL_TOKEN - may not be available in all builds
 let MIXPANEL_TOKEN = null;
-// try {
-//   const envModule = require('@env');
-//   MIXPANEL_TOKEN = envModule.MIXPANEL_TOKEN;
-// } catch (e) {
-//   console.log('[Analytics] @env not available, using fallback');
-//   // Fallback token for production builds
-//   MIXPANEL_TOKEN = '960505c4a91475bb48810345ab802c0e';
-// }
+try {
+  const envModule = require('@env');
+  MIXPANEL_TOKEN = envModule.MIXPANEL_TOKEN;
+} catch (e) {
+  console.log('[Analytics] @env not available, using fallback');
+  // Fallback token for production builds
+  MIXPANEL_TOKEN = '960505c4a91475bb48810345ab802c0e';
+}
 
 // Check if we're in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
 
 // Conditionally import Mixpanel only in production
 let Mixpanel = null;
-// if (!isExpoGo) {
-//   try {
-//     const MixpanelModule = require('mixpanel-react-native');
-//     Mixpanel = MixpanelModule.Mixpanel;
-//   } catch (e) {
-//     console.log('[Analytics] Mixpanel not available');
-//   }
-// }
+if (!isExpoGo) {
+  try {
+    const MixpanelModule = require('mixpanel-react-native');
+    Mixpanel = MixpanelModule.Mixpanel;
+  } catch (e) {
+    console.log('[Analytics] Mixpanel not available');
+  }
+}
 
 let mixpanel = null;
 let isInitialized = false; // Track initialization state
@@ -43,12 +40,10 @@ let isInitialized = false; // Track initialization state
  * Initialize Mixpanel
  * Call this once when the app starts
  * Note: Only works in production builds, not in Expo Go
- *
- * DISABLED FOR TESTING - Returns immediately without initializing
  */
 export const initAnalytics = async () => {
   if (ANALYTICS_DISABLED) {
-    console.log('[Analytics] 🚫 DISABLED FOR TESTING - Skipping initialization');
+    console.log('[Analytics] 🚫 DISABLED - Skipping initialization');
     return;
   }
 
@@ -108,8 +103,6 @@ export const initAnalytics = async () => {
  * Track a custom event
  * @param {string} eventName - Name of the event
  * @param {object} properties - Additional event properties
- *
- * DISABLED FOR TESTING - Returns immediately without tracking
  */
 export const trackEvent = (eventName, properties = {}) => {
   if (ANALYTICS_DISABLED) {
@@ -146,8 +139,6 @@ export const trackEvent = (eventName, properties = {}) => {
  * Identify a user
  * @param {string} userId - Unique user identifier
  * @param {object} userProperties - User profile properties (IGNORED - not used to prevent crashes)
- *
- * DISABLED FOR TESTING - Returns immediately without identifying
  */
 export const identifyUser = (userId, userProperties = {}) => {
   if (ANALYTICS_DISABLED) {
@@ -185,8 +176,6 @@ export const identifyUser = (userId, userProperties = {}) => {
 
 /**
  * Reset user (on logout)
- *
- * DISABLED FOR TESTING - Returns immediately without resetting
  */
 export const resetUser = () => {
   if (ANALYTICS_DISABLED) {
@@ -217,8 +206,6 @@ export const resetUser = () => {
 /**
  * Set user properties
  * @param {object} properties - Properties to set for the user
- *
- * DISABLED FOR TESTING - Returns immediately without setting properties
  */
 export const setUserProperties = (properties) => {
   if (ANALYTICS_DISABLED) {

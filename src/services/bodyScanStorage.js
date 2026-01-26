@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { supabase } from './supabase';
+import { supabase, uploadImage } from './supabase';
 import {
   saveBodyScan as storageLayerSaveBodyScan,
   getBodyScans as storageLayerGetBodyScans,
@@ -13,8 +13,52 @@ const isExpoGo = Constants.appOwnership === 'expo';
 const USE_LOCAL_STORAGE = false; // Force Supabase mode for testing
 
 /**
+ * Upload an image file to Supabase storage
+ * @param {string} localUri - Local file URI
+ * @param {string} userId - User ID
+ * @param {string} type - Image type ('front' or 'side')
+ * @returns {Promise<string>} - Storage path (not URL)
+ */
+const uploadBodyScanImage = async (localUri, userId, type) => {
+  if (!localUri) return null;
+
+  try {
+    console.log(`[BodyScan] Uploading ${type} image to Supabase...`);
+    console.log(`[BodyScan] Local URI:`, localUri);
+    console.log(`[BodyScan] User ID:`, userId);
+
+    // Fetch the image file as ArrayBuffer (works better in React Native)
+    const response = await fetch(localUri);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    console.log(`[BodyScan] ArrayBuffer created, size:`, arrayBuffer.byteLength);
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const filename = `${userId}/${type}_${timestamp}.jpg`;
+
+    // Upload to Supabase storage bucket 'body-scans' (PUBLIC with RLS)
+    console.log(`[BodyScan] Uploading to bucket 'body-scans', filename:`, filename);
+    const uploadResult = await uploadImage('body-scans', filename, arrayBuffer);
+    console.log(`[BodyScan] Upload result:`, uploadResult);
+
+    console.log(`[BodyScan] ${type} image uploaded successfully:`, filename);
+    // Return path, not URL (we'll generate public URLs when reading)
+    return filename;
+  } catch (error) {
+    console.error(`[BodyScan] Failed to upload ${type} image:`, error);
+    console.error(`[BodyScan] Error details:`, error.message, error.stack);
+    // Return local URI as fallback (better than nothing)
+    console.warn(`[BodyScan] Falling back to local URI:`, localUri);
+    return localUri;
+  }
+};
+
+/**
  * Save a body scan result
- * Uses storage abstraction layer (local in dev, Supabase in production)
+ * Uploads images to Supabase storage and saves record to database
  */
 export const saveBodyScan = async (scanData) => {
   try {
@@ -24,6 +68,22 @@ export const saveBodyScan = async (scanData) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
       userId = user.id;
+    }
+
+    // Upload images to Supabase storage (only if not using local storage)
+    let frontImageUrl = scanData.front_image_path;
+    let sideImageUrl = scanData.side_image_path;
+
+    if (!USE_LOCAL_STORAGE) {
+      console.log('[BodyScan] Uploading images to Supabase storage...');
+
+      // Upload both images in parallel
+      [frontImageUrl, sideImageUrl] = await Promise.all([
+        uploadBodyScanImage(scanData.front_image_path, userId, 'front'),
+        uploadBodyScanImage(scanData.side_image_path, userId, 'side'),
+      ]);
+
+      console.log('[BodyScan] Images uploaded successfully');
     }
 
     // Format data for storage
@@ -40,8 +100,8 @@ export const saveBodyScan = async (scanData) => {
       age: scanData.age,
       gender: scanData.gender,
       bmi: scanData.bmi || null,
-      front_image_path: scanData.front_image_path,
-      side_image_path: scanData.side_image_path,
+      front_image_path: frontImageUrl, // Stores Supabase storage path
+      side_image_path: sideImageUrl,   // Stores Supabase storage path
       ai_analysis: scanData.ai_analysis,
       front_observations: scanData.front_observations,
       side_observations: scanData.side_observations,
@@ -50,7 +110,7 @@ export const saveBodyScan = async (scanData) => {
     };
 
     const result = await storageLayerSaveBodyScan(scanRecord);
-    return formatScanFromDB(result);
+    return await formatScanFromDB(result);
   } catch (error) {
     console.error('Error saving body scan:', error);
     throw error;
@@ -73,7 +133,7 @@ export const getBodyScans = async () => {
     }
 
     const scans = await storageLayerGetBodyScans(userId);
-    return (scans || []).map(formatScanFromDB);
+    return await Promise.all((scans || []).map(formatScanFromDB));
   } catch (error) {
     console.error('Error getting body scans:', error);
     return [];
@@ -94,7 +154,7 @@ export const getLatestBodyScan = async () => {
     }
 
     const scan = await storageLayerGetLatestBodyScan(userId);
-    return scan ? formatScanFromDB(scan) : null;
+    return scan ? await formatScanFromDB(scan) : null;
   } catch (error) {
     console.error('Error getting latest body scan:', error);
     return null;
@@ -112,7 +172,7 @@ export const getBodyScanById = async (scanId) => {
       // Local storage - get all scans and find by ID
       const scans = await storageLayerGetBodyScans();
       const scan = scans.find(s => s.id === scanId);
-      return scan ? formatScanFromDB(scan) : null;
+      return scan ? await formatScanFromDB(scan) : null;
     } else {
       // Supabase
       const { data, error } = await supabase
@@ -122,7 +182,7 @@ export const getBodyScanById = async (scanId) => {
         .single();
 
       if (error) throw error;
-      return data ? formatScanFromDB(data) : null;
+      return data ? await formatScanFromDB(data) : null;
     }
   } catch (error) {
     console.error('Error getting body scan by ID:', error);
@@ -251,22 +311,41 @@ export const formatScanForStorage = (scanData, analysisResult) => {
 };
 
 /**
- * Format database record to app format
+ * Format database record to app format and generate public URLs for images
  * @param {Object} dbRecord - Database record
- * @returns {Object} - Formatted scan for app use
+ * @returns {Promise<Object>} - Formatted scan for app use with public URLs
  */
-const formatScanFromDB = (dbRecord) => {
+const formatScanFromDB = async (dbRecord) => {
+  // Generate public URLs for images (only if not local URIs)
+  let frontImageUrl = dbRecord.front_image_path;
+  let sideImageUrl = dbRecord.side_image_path;
+
+  if (!USE_LOCAL_STORAGE) {
+    try {
+      // Only generate public URLs if the paths don't start with 'file://' (local URIs)
+      if (frontImageUrl && !frontImageUrl.startsWith('file://')) {
+        frontImageUrl = supabase.storage.from('body-scans').getPublicUrl(frontImageUrl).data.publicUrl;
+      }
+      if (sideImageUrl && !sideImageUrl.startsWith('file://')) {
+        sideImageUrl = supabase.storage.from('body-scans').getPublicUrl(sideImageUrl).data.publicUrl;
+      }
+    } catch (error) {
+      console.error('[BodyScan] Failed to generate public URLs:', error);
+      // Keep original paths as fallback
+    }
+  }
+
   return {
     id: dbRecord.id,
     scan_date: dbRecord.scan_date,
     created_at: dbRecord.created_at,
-    
+
     // Body composition
     body_fat_percentage: dbRecord.body_fat_percentage,
     confidence_level: dbRecord.confidence_level,
     confidence_low: dbRecord.confidence_low,
     confidence_high: dbRecord.confidence_high,
-    
+
     // Measurements
     weight_kg: dbRecord.weight_kg,
     weight_lbs: dbRecord.weight_lbs,
@@ -274,11 +353,11 @@ const formatScanFromDB = (dbRecord) => {
     age: dbRecord.age,
     gender: dbRecord.gender,
     bmi: dbRecord.bmi,
-    
-    // Images
-    front_image_path: dbRecord.front_image_path,
-    side_image_path: dbRecord.side_image_path,
-    
+
+    // Images (public URLs from storage)
+    front_image_path: frontImageUrl,
+    side_image_path: sideImageUrl,
+
     // AI analysis
     ai_analysis: dbRecord.ai_analysis,
     front_observations: dbRecord.front_observations,

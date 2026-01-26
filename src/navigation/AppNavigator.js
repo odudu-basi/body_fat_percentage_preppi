@@ -2,8 +2,14 @@ import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import Constants from 'expo-constants';
 
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
+import { useSubscriptionSync } from '../context/SubscriptionSyncContext';
+
+// Check if we're in Expo Go (development mode)
+const isExpoGo = Constants.appOwnership === 'expo';
 import {
   WelcomeScreen,
   GenderScreen,
@@ -97,6 +103,21 @@ const AuthNavigator = () => {
   );
 };
 
+// Paywall Navigator (for authenticated but unsubscribed users)
+const PaywallNavigator = () => {
+  return (
+    <AuthStack.Navigator
+      initialRouteName="Paywall"
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: Colors.dark.background },
+      }}
+    >
+      <AuthStack.Screen name="Paywall" component={PaywallScreen} />
+    </AuthStack.Navigator>
+  );
+};
+
 // Main Stack Navigator (includes tabs + modal screens)
 const MainNavigator = () => {
   return (
@@ -163,21 +184,49 @@ const LoadingScreen = () => (
   </View>
 );
 
-// Root Navigator - handles auth state
+// Root Navigator - handles auth state and subscription gate
+// Per user requirements:
+// - Onboarding, splash, welcome = NOT paywalled
+// - Main app = Requires subscription (checked via Superwall)
 const AppNavigator = () => {
   const { isAuthenticated, initialized, loading } = useAuth();
+  const { isPro, isLoading: subLoading } = useSubscription();
 
-  // Show loading while initializing
+  // Show loading while initializing auth
   if (!initialized || loading) {
     return <LoadingScreen />;
   }
 
-  // Show auth flow if not authenticated
+  // Show onboarding/auth flow if not authenticated
+  // This includes: Welcome, Gender, Birthday, ..., PaywallScreen, LoginScreen
   if (!isAuthenticated) {
+    console.log('[AppNavigator] User not authenticated - showing onboarding');
     return <AuthNavigator />;
   }
 
-  // Show main app if authenticated
+  // User is authenticated - now check subscription
+  // Only wait for RevenueCat subscription status to load
+  // Note: SubscriptionSync is optional per Superwall docs
+  if (subLoading) {
+    console.log('[AppNavigator] Waiting for subscription status...');
+    return <LoadingScreen />;
+  }
+
+  // In Expo Go, skip subscription check (RevenueCat doesn't work in Expo Go)
+  if (isExpoGo) {
+    console.log('[AppNavigator] Dev mode - bypassing subscription check');
+    return <MainNavigator />;
+  }
+
+  // Check subscription status (RevenueCat is source of truth)
+  // If not subscribed, show paywall (for app reinstalls, new devices, etc.)
+  if (!isPro) {
+    console.log('[AppNavigator] User authenticated but not subscribed - showing paywall');
+    return <PaywallNavigator />;
+  }
+
+  // User is authenticated AND subscribed - show main app
+  console.log('[AppNavigator] User authenticated and subscribed - showing main app');
   return <MainNavigator />;
 };
 

@@ -199,18 +199,52 @@ Superwall:
   https://superwall.com/docs/expo/quickstart/configure\
   https://superwall.com/docs/expo/quickstart/present-first-pay
   wall\
-  https://superwall.com/docs/expo/quickstart/user-management 
+  https://superwall.com/docs/expo/quickstart/user-management
   https://superwall.com/docs/expo/quickstart/feature-gating
   https://superwall.com/docs/expo/quickstart/tracking-subscription-state
   https://superwall.com/docs/expo/quickstart/setting-user-properties
   https://superwall.com/docs/expo/quickstart/in-app-paywall-previews
-  suoerwall webchokout 
+  suoerwall webchokout
   https://superwall.com/docs/expo/guides/web-checkout
   https://superwall.com/docs/expo/guides/web-checkout/post-checkout-redirecting
   https://superwall.com/docs/expo/guides/web-checkout/using-revenuecat
   https://superwall.com/docs/expo/guides/web-checkout/linking-membership-to-iOS-app
 - **Superwall**: Used for paywall UI and A/B testing different paywall designs
 - **RevenueCat**: Used for handling subscriptions, purchase validation, and managing entitlements
+
+### Crash Solved: "The subscription status was not set"
+
+**Problem:**
+The app was showing a Superwall error: `"The subscription status was not set. Please restart the app and try again."`
+
+**Root Cause:**
+RevenueCat was never initialized before being used. The app was calling RevenueCat functions (`Purchases.getCustomerInfo()`, `Purchases.purchaseStoreProduct()`, etc.) without first calling `Purchases.configure()` with the API key.
+
+**Solution:**
+Added RevenueCat initialization in `App.js` before rendering any providers:
+
+```javascript
+import Purchases from 'react-native-purchases';
+
+export default function App() {
+  // Configure RevenueCat on mount (BEFORE rendering providers)
+  useEffect(() => {
+    const apiKey = process.env.REVENUECAT_API_KEY || '';
+    Purchases.configure({ apiKey });
+    console.log('[App] ✅ RevenueCat configured successfully');
+  }, []);
+
+  // ... rest of app
+}
+```
+
+**Key Points:**
+1. RevenueCat MUST be configured before SubscriptionSyncContext attempts to sync status to Superwall
+2. The API key should be stored in environment variables (`REVENUECAT_API_KEY`)
+3. For EAS builds, add the key to Expo dashboard secrets
+4. Initialization happens once on app mount, before any providers render
+
+**Result:** Superwall now receives subscription status correctly from RevenueCat, eliminating the "subscription status was not set" error.
 
 ## Configuration
 

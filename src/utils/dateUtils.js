@@ -52,12 +52,23 @@ export const isSameDay = (date1, date2) => {
 };
 
 /**
+ * Parse a date-only string (YYYY-MM-DD) in local timezone
+ * Avoids timezone issues when parsing date strings
+ * @param {string} dateString - Date string in YYYY-MM-DD format
+ * @returns {Date} Date object in local timezone
+ */
+const parseDateLocal = (dateString) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+/**
  * Format a date for display
- * @param {Date|string} date - The date to format
+ * @param {Date|string} date - The date to format (Date object or YYYY-MM-DD string)
  * @returns {string} Formatted date string
  */
 export const formatDateForDisplay = (date) => {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = typeof date === 'string' ? parseDateLocal(date) : date;
   return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',

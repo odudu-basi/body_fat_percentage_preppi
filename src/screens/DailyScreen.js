@@ -262,11 +262,6 @@ const DailyScreen = () => {
     );
   };
 
-  // Handle describe button press
-  const handleDescribePress = () => {
-    // TODO: Implement describe flow
-    console.log('Describe pressed');
-  };
 
   // Dynamic header text based on active tab
   const getHeaderText = () => {
@@ -348,8 +343,7 @@ const DailyScreen = () => {
             />
             
             {/* Add Calories Box */}
-            <AddCaloriesBox 
-              onDescribe={handleDescribePress}
+            <AddCaloriesBox
               onPhoto={handlePhotoPress}
             />
 

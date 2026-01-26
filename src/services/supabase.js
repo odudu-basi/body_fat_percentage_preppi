@@ -383,21 +383,47 @@ export const uploadImage = async (bucket, path, file) => {
     .upload(path, file, {
       cacheControl: '3600',
       upsert: true,
+      contentType: 'image/jpeg', // Explicitly set content type
     });
-  
+
   if (error) throw error;
   return data;
 };
 
 /**
- * Get public URL for an image
+ * Get public URL for an image (for public buckets)
  */
 export const getImageUrl = (bucket, path) => {
   const { data } = supabase.storage
     .from(bucket)
     .getPublicUrl(path);
-  
+
   return data.publicUrl;
+};
+
+/**
+ * Get signed URL for private image (expires after specified time)
+ * @param {string} bucket - Storage bucket name
+ * @param {string} path - File path in bucket
+ * @param {number} expiresIn - Expiration time in seconds (default 1 year)
+ * @returns {Promise<string>} - Signed URL
+ */
+export const getPrivateImageUrl = async (bucket, path, expiresIn = 31536000) => {
+  if (!path) return null;
+
+  console.log(`[Supabase] Generating signed URL for bucket: ${bucket}, path: ${path}`);
+
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(path, expiresIn); // 1 year default
+
+  if (error) {
+    console.error(`[Supabase] Error creating signed URL for ${bucket}/${path}:`, error);
+    throw error;
+  }
+
+  console.log(`[Supabase] Signed URL generated successfully:`, data.signedUrl);
+  return data.signedUrl;
 };
 
 /**

@@ -134,10 +134,12 @@ const CalorieMealCard = ({
         {/* Left side - Food image thumbnail */}
         <View style={styles.imageContainer}>
           {photo_uri ? (
-            <Image 
-              source={{ uri: photo_uri }} 
+            <Image
+              source={{ uri: photo_uri }}
               style={styles.foodImage}
               resizeMode="cover"
+              onError={(error) => console.error('[CalorieMealCard] Image load error:', error.nativeEvent.error, 'URI:', photo_uri)}
+              onLoad={() => console.log('[CalorieMealCard] Image loaded successfully:', photo_uri)}
             />
           ) : (
             <View style={styles.placeholderImage}>

@@ -21,8 +21,9 @@ import {
   toggleExerciseCompletion,
   deleteExercise,
 } from '../../services/exerciseStorage';
-import { CARDIO_EXERCISES, WEIGHTLIFTING_EXERCISES } from '../../constants/dailyExercises';
+import { CARDIO_EXERCISES, WEIGHTLIFTING_EXERCISES, getDailyExercises } from '../../constants/dailyExercises';
 import { trackExercisePress, trackExerciseToggle } from '../../utils/analytics';
+import { useAuth } from '../../context/AuthContext';
 
 // Available icons for exercises
 const EXERCISE_ICONS = [
@@ -37,6 +38,7 @@ const EXERCISE_ICONS = [
 ];
 
 const ExerciseList = ({ onExerciseCaloriesChange }) => {
+  const { user } = useAuth();
   const [exercises, setExercises] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -57,13 +59,36 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
     return isCardio ? 'cardio' : 'weightlifting';
   };
 
-  // Load exercises from database
+  // Load exercises from database and auto-populate if empty
   const loadExercises = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getTodaysExercises();
+
+      // If no exercises exist for today, auto-populate based on difficulty
+      if (data.length === 0 && user?.difficulty) {
+        console.log('[ExerciseList] No exercises for today, auto-populating based on difficulty:', user.difficulty);
+        const dailyExercises = getDailyExercises(user.difficulty);
+
+        // Add each daily exercise to the database
+        for (const exercise of dailyExercises) {
+          const exerciseData = {
+            title: exercise.title,
+            description: exercise.description,
+            duration: exercise.duration,
+            calories: exercise.calories,
+            icon: exercise.icon,
+          };
+          const result = await addExercise(exerciseData);
+          if (result) {
+            data.push(result);
+          }
+        }
+        console.log('[ExerciseList] Auto-populated', data.length, 'exercises');
+      }
+
       setExercises(data);
-      
+
       // Calculate and notify parent of burned calories
       const burnedCalories = data
         .filter(ex => ex.is_completed)
@@ -76,7 +101,7 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
     } finally {
       setLoading(false);
     }
-  }, [onExerciseCaloriesChange]);
+  }, [onExerciseCaloriesChange, user?.difficulty]);
 
   useEffect(() => {
     loadExercises();

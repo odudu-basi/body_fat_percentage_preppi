@@ -21,6 +21,9 @@ export const ENV = {
 
   // RevenueCat - Subscriptions
   REVENUECAT_API_KEY: process.env.REVENUECAT_API_KEY || '',
+
+  // Superwall - Paywall UI
+  SUPERWALL_API_KEY: process.env.SUPERWALL_API_KEY || '',
 };
 
 // Validate required environment variables

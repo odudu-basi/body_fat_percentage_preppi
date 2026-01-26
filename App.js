@@ -1,7 +1,6 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { View, StyleSheet, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import Constants from 'expo-constants';
 import { useFonts } from 'expo-font';
 import {
   Inter_400Regular,
@@ -19,25 +18,76 @@ import * as SplashScreen from 'expo-splash-screen';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import Constants from 'expo-constants';
 
-import SplashScreenComponent from './src/screens/SplashScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import { Colors } from './src/constants/theme';
 import { AuthProvider } from './src/context/AuthContext';
 import { SubscriptionProvider } from './src/context/SubscriptionContext';
-import { initAnalytics, trackAppOpen, trackScreenView } from './src/utils/analytics';
 
-// Check if we're in Expo Go
+// Check if we're in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
+
+// Conditionally import Superwall and RevenueCat only in production
+let SuperwallProvider, SuperwallLoaded, SuperwallLoading;
+let Purchases;
+let SuperwallPurchaseController, SubscriptionSyncContext, UserIdentificationSync;
+
+if (!isExpoGo) {
+  // Production build - import Superwall and RevenueCat
+  const superwallModule = require('expo-superwall');
+  SuperwallProvider = superwallModule.SuperwallProvider;
+  SuperwallLoaded = superwallModule.SuperwallLoaded;
+  SuperwallLoading = superwallModule.SuperwallLoading;
+
+  Purchases = require('react-native-purchases').default;
+
+  SuperwallPurchaseController = require('./src/context/SuperwallPurchaseController').default;
+  SubscriptionSyncContext = require('./src/context/SubscriptionSyncContext').default;
+  UserIdentificationSync = require('./src/context/UserIdentificationSync').default;
+} else {
+  // Expo Go - provide dummy components
+  console.log('[App] 🔧 DEV MODE: Skipping Superwall/RevenueCat imports (Expo Go)');
+
+  // Dummy pass-through components
+  SuperwallProvider = ({ children }) => <>{children}</>;
+  SuperwallLoaded = ({ children }) => <>{children}</>;
+  SuperwallLoading = ({ children }) => null;
+  SuperwallPurchaseController = ({ children }) => <>{children}</>;
+  SubscriptionSyncContext = ({ children }) => <>{children}</>;
+  UserIdentificationSync = ({ children }) => <>{children}</>;
+}
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
-  const [appReady, setAppReady] = useState(false); // NEW: Track when app is ready for native modules
   const routeNameRef = React.useRef();
   const navigationRef = React.useRef();
+
+  // CRITICAL: Configure RevenueCat on mount (before rendering providers)
+  // Only in production builds, not in Expo Go
+  useEffect(() => {
+    if (isExpoGo) {
+      console.log('[App] 🔧 DEV MODE: Skipping RevenueCat configuration (Expo Go)');
+      return;
+    }
+
+    const apiKey = process.env.REVENUECAT_API_KEY || '';
+
+    if (!apiKey) {
+      console.error('[App] ❌ REVENUECAT_API_KEY not found in environment!');
+      console.error('[App] RevenueCat will not work without API key');
+      return;
+    }
+
+    console.log('[App] 🔧 Configuring RevenueCat...');
+    console.log('[App] Platform:', Platform.OS);
+
+    Purchases.configure({ apiKey });
+
+    console.log('[App] ✅ RevenueCat configured successfully');
+  }, []);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -50,115 +100,85 @@ export default function App() {
     Rubik_700Bold,
   });
 
-  // CRITICAL: Wait for splash to finish, THEN mark app as ready for native modules
-  useEffect(() => {
-    if (!showSplash && fontsLoaded) {
-      // Wait 2 seconds after splash finishes before allowing native modules
-      const timer = setTimeout(() => {
-        console.log('[App] ✅ App ready for native module initialization');
-        setAppReady(true);
-      }, 2000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [showSplash, fontsLoaded]);
-
-  // Initialize Mixpanel analytics - ONLY after app is ready
-  useEffect(() => {
-    let isMounted = true;
-    let timeoutId = null;
-
-    const setupAnalytics = async () => {
-      // Wait for app to be ready
-      if (!appReady) {
-        return;
-      }
-
-      // CRITICAL: Add additional delay to avoid collision
-      console.log('[App] Scheduling analytics initialization in 5 seconds...');
-      timeoutId = setTimeout(async () => {
-        try {
-          console.log('[App] Initializing analytics...');
-          await initAnalytics();
-          if (isMounted) {
-            trackAppOpen();
-            console.log('[App] Analytics initialized successfully');
-          }
-        } catch (error) {
-          console.error('[App] Analytics setup error:', error);
-          // Don't crash the app if analytics fails
-        }
-      }, 5000); // Wait 5 seconds after app is ready
-    };
-
-    setupAnalytics();
-
-    return () => {
-      isMounted = false;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [appReady]); // Re-run when app becomes ready
-
-  // Superwall is now configured via SuperwallProvider wrapper
-
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded) {
       await SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
 
-  const handleSplashFinish = () => {
-    setShowSplash(false);
-  };
-
   if (!fontsLoaded) {
     return null;
   }
 
-  const appContent = (
-    <AuthProvider appReady={appReady}>
-      <SubscriptionProvider appReady={appReady}>
-        <View style={styles.container} onLayout={onLayoutRootView}>
-          <StatusBar style="light" />
-          {showSplash ? (
-            <SplashScreenComponent onFinish={handleSplashFinish} />
-          ) : (
-            <NavigationContainer
-              ref={navigationRef}
-              onReady={() => {
-                routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
-              }}
-              onStateChange={() => {
-                try {
-                  const previousRouteName = routeNameRef.current;
-                  const currentRouteName = navigationRef.current?.getCurrentRoute()?.name;
+  // Superwall API keys from environment (only used in production)
+  const superwallApiKeys = isExpoGo ? null : {
+    ios: process.env.SUPERWALL_API_KEY || '',
+    android: process.env.SUPERWALL_API_KEY || '',
+  };
 
-                  if (previousRouteName !== currentRouteName && currentRouteName) {
-                    // Track screen view in Mixpanel
-                    trackScreenView(currentRouteName);
-                  }
+  // Render different provider hierarchy based on environment
+  if (isExpoGo) {
+    // Expo Go - Simple provider hierarchy
+    // Still need SubscriptionSyncContext and UserIdentificationSync for hooks
+    return (
+      <GestureHandlerRootView style={styles.container}>
+        <SafeAreaProvider>
+          <AuthProvider>
+            <SubscriptionProvider>
+              <SubscriptionSyncContext>
+                <UserIdentificationSync>
+                  <View style={styles.container} onLayout={onLayoutRootView}>
+                    <StatusBar style="light" />
+                    <NavigationContainer
+                      ref={navigationRef}
+                      onReady={() => {
+                        routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
+                      }}
+                    >
+                      <AppNavigator />
+                    </NavigationContainer>
+                  </View>
+                </UserIdentificationSync>
+              </SubscriptionSyncContext>
+            </SubscriptionProvider>
+          </AuthProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
 
-                  // Save the current route name for next change
-                  routeNameRef.current = currentRouteName;
-                } catch (error) {
-                  console.error('[Navigation] Error tracking screen view:', error);
-                }
-              }}
-            >
-              <AppNavigator />
-            </NavigationContainer>
-          )}
-        </View>
-      </SubscriptionProvider>
-    </AuthProvider>
-  );
-
+  // Production - Full provider hierarchy with Superwall/RevenueCat
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
-        {appContent}
+        <SuperwallPurchaseController>
+          <SuperwallProvider apiKeys={superwallApiKeys}>
+            <SuperwallLoading>
+              <View style={styles.container} />
+            </SuperwallLoading>
+            <SuperwallLoaded>
+              <AuthProvider>
+                <SubscriptionProvider>
+                  <SubscriptionSyncContext>
+                    <UserIdentificationSync>
+                      <View style={styles.container} onLayout={onLayoutRootView}>
+                        <StatusBar style="light" />
+                        <NavigationContainer
+                          ref={navigationRef}
+                          onReady={() => {
+                            routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
+                          }}
+                        >
+                          <AppNavigator />
+                        </NavigationContainer>
+                      </View>
+                    </UserIdentificationSync>
+                  </SubscriptionSyncContext>
+                </SubscriptionProvider>
+              </AuthProvider>
+            </SuperwallLoaded>
+          </SuperwallProvider>
+        </SuperwallPurchaseController>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

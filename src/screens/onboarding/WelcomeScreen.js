@@ -13,8 +13,12 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 import { checkProAccess } from '../../services/purchases';
+
+// Check if we're in Expo Go (development mode)
+const isExpoGo = Constants.appOwnership === 'expo';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,7 +33,14 @@ const WelcomeScreen = () => {
   };
 
   const handleSignIn = async () => {
-    // Check if user has subscription before navigating
+    // DEVELOPMENT MODE: Skip paywall completely in Expo Go
+    if (isExpoGo) {
+      console.log('[WelcomeScreen] 🔧 DEV MODE: Skipping paywall check - going to Login');
+      navigation.navigate('Login');
+      return;
+    }
+
+    // PRODUCTION MODE: Check if user has subscription before navigating
     setIsCheckingSubscription(true);
     try {
       const hasProAccess = await checkProAccess();

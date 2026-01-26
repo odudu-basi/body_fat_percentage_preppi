@@ -46,7 +46,7 @@ export const useAuth = () => {
   return context;
 };
 
-export const AuthProvider = ({ children, appReady }) => {
+export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [session, setSession] = useState(null);
@@ -54,24 +54,17 @@ export const AuthProvider = ({ children, appReady }) => {
   const [initialized, setInitialized] = useState(false);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
 
-  // Check Apple Sign In availability - ONLY when app is ready
+  // Check Apple Sign In availability
   useEffect(() => {
-    if (!appReady) return;
-
     const checkAppleAvailability = async () => {
       const available = await isAppleSignInAvailable();
       setAppleSignInAvailable(available);
     };
     checkAppleAvailability();
-  }, [appReady]);
+  }, []);
 
-  // Initialize auth state - ONLY when app is ready
+  // Initialize auth state
   useEffect(() => {
-    // CRITICAL: Don't initialize until app is ready
-    if (!appReady) {
-      console.log('[AuthContext] Waiting for app to be ready...');
-      return;
-    }
 
     let subscription = null;
     let isMounted = true; // Prevent state updates after unmount
@@ -213,7 +206,7 @@ export const AuthProvider = ({ children, appReady }) => {
       isMounted = false; // Mark as unmounted
       subscription?.unsubscribe();
     };
-  }, [appReady]); // Initialize when app becomes ready
+  }, []); // Initialize once on mount
 
   // Dev mode sign in (bypasses Apple authentication)
   const signInDevMode = async (onboardingData = {}) => {

@@ -2,26 +2,28 @@
   "expo": {
     "name": "BodyMaxx",
     "slug": "Body_percentage_preppi",
-    "version": "2.4.0",
+    "version": "2.7.0",
     "orientation": "portrait",
     "icon": "./assets/splash-icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "preppi",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#121212"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "-5.Preppi-AI",
-      "buildNumber": "1",
+      "buildNumber": "15",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["preppi"]
+            "CFBundleURLSchemes": [
+              "preppi"
+            ]
           }
         ]
       }
@@ -46,7 +48,18 @@
     "plugins": [
       "expo-font",
       "expo-apple-authentication",
-      "expo-dev-client"
+      "expo-dev-client",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          },
+          "android": {
+            "minSdkVersion": 21
+          }
+        }
+      ]
     ]
   }
 }
