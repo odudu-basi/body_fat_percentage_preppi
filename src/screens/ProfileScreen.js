@@ -489,7 +489,15 @@ const ProfileScreen = ({ navigation }) => {
     <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chevron-back" size={28} color={Colors.dark.textPrimary} />
+        </TouchableOpacity>
         <Text style={styles.title}>Profile</Text>
+        <View style={styles.backButton} />
       </View>
 
       <ScrollView
@@ -618,6 +626,39 @@ const ProfileScreen = ({ navigation }) => {
           />
         </View>
 
+        {/* Meal Plan Preferences Section */}
+        <SectionHeader title="Meal Plan Preferences" />
+        <View style={styles.section}>
+          <ProfileCard
+            icon="globe-outline"
+            label="Culture"
+            value="Not set"
+            onPress={() => {
+              // TODO: Open culture selection modal
+              console.log('Culture preferences');
+            }}
+          />
+          <ProfileCard
+            icon="alert-circle-outline"
+            label="Allergies"
+            value="Not set"
+            onPress={() => {
+              // TODO: Open allergies selection modal
+              console.log('Allergies preferences');
+            }}
+          />
+          <ProfileCard
+            icon="restaurant-outline"
+            label="Kitchen Items"
+            value={
+              profile?.kitchen_items && profile.kitchen_items.length > 0
+                ? `${profile.kitchen_items.length} items selected`
+                : 'Not set'
+            }
+            onPress={() => navigation.navigate('KitchenItems')}
+          />
+        </View>
+
         {/* Account Section */}
         <SectionHeader title="Account" />
         <View style={styles.section}>
@@ -716,8 +757,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontFamily: 'Rubik_700Bold',

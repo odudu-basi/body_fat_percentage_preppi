@@ -1,0 +1,71 @@
+-- ============================================
+-- MEAL RECIPES ENHANCEMENT MIGRATION
+-- ============================================
+-- Add this to your Supabase SQL Editor
+-- Dashboard: https://supabase.com/dashboard/project/zltkngnohnpaiowffpqc/sql
+-- ============================================
+
+-- ============================================
+-- MEAL PLANS - Add Index for Recipe Queries
+-- ============================================
+-- Add index on meals JSONB field for better performance when querying recipes
+-- This helps with queries that filter/search within the meals array
+
+CREATE INDEX IF NOT EXISTS idx_meal_plans_meals_recipe
+ON meal_plans USING gin (meals jsonb_path_ops);
+
+-- ============================================
+-- DOCUMENTATION: Expected JSONB Structure
+-- ============================================
+-- The meals JSONB field now includes recipe data:
+--
+-- {
+--   "meals": [
+--     {
+--       "meal_type": "breakfast",
+--       "name": "Meal name",
+--       "calories": 500,
+--       "protein_g": 30,
+--       "carbs_g": 40,
+--       "fat_g": 15,
+--       "fiber_g": 5,
+--       "sugar_g": 8,
+--       "sodium_mg": 400,
+--       "description": "Meal description",
+--       "image_uri": "file://...",
+--       "ingredients": ["ingredient 1", "ingredient 2"],
+--       "portion_details": "Portion info",
+--       "completed": false,
+--       "meal_log_id": "uuid-if-checked",
+--       "recipe": {
+--         "ingredients": [
+--           {
+--             "name": "Ingredient name",
+--             "amount": "2 cups",
+--             "calories": 100,
+--             "notes": "Optional prep notes"
+--           }
+--         ],
+--         "instructions": [
+--           "Step 1: First instruction",
+--           "Step 2: Second instruction"
+--         ],
+--         "prep_time": "10 minutes",
+--         "cook_time": "15 minutes",
+--         "total_time": "25 minutes",
+--         "servings": 1,
+--         "difficulty": "Easy",
+--         "tips": [
+--           "Helpful cooking tip 1",
+--           "Helpful cooking tip 2"
+--         ]
+--       }
+--     }
+--   ]
+-- }
+
+-- ============================================
+-- DONE!
+-- ============================================
+-- The meals JSONB field can now store complete recipe data.
+-- No schema changes needed thanks to JSONB flexibility.

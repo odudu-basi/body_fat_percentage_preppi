@@ -81,12 +81,15 @@ export const saveMeal = async (mealData) => {
       console.log('[Meal] Image uploaded successfully');
     }
 
+    // Use provided date or default to today
+    const mealDate = mealData.date || getLocalDateString(now);
+
     // Format data for storage
     const mealRecord = {
       user_id: userId,
       meal_name: mealData.meal_name || 'Unknown Meal',
       meal_type: mealData.meal_time || 'snack',
-      date: getLocalDateString(now),
+      date: mealDate,
       time: now.toTimeString().split(' ')[0],
       calories: mealData.total_calories || 0,
       protein_g: mealData.macros?.protein_g || 0,

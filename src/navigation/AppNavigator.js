@@ -36,6 +36,9 @@ import BuddyChatScreen from '../screens/BuddyChatScreen';
 import ResultsScreen from '../screens/ResultsScreen';
 import ScanDetailsScreen from '../screens/ScanDetailsScreen';
 import NutritionResultsScreen from '../screens/NutritionResultsScreen';
+import MealDetailsScreen from '../screens/MealDetailsScreen';
+import KitchenItemsScreen from '../screens/KitchenItemsScreen';
+import ReplaceMealScreen from '../screens/ReplaceMealScreen';
 import CustomTabBar from '../components/common/CustomTabBar';
 import { Colors } from '../constants/theme';
 
@@ -143,16 +146,31 @@ const MainNavigator = () => {
           animation: 'slide_from_right',
         }}
       />
-      <Stack.Screen 
-        name="NutritionResults" 
+      <Stack.Screen
+        name="NutritionResults"
         component={NutritionResultsScreen}
         options={{
           animation: 'slide_from_bottom',
           presentation: 'fullScreenModal',
         }}
       />
-      <Stack.Screen 
-        name="BuddyChat" 
+      <Stack.Screen
+        name="MealDetails"
+        component={MealDetailsScreen}
+        options={{
+          animation: 'slide_from_bottom',
+          presentation: 'fullScreenModal',
+        }}
+      />
+      <Stack.Screen
+        name="ReplaceMeal"
+        component={ReplaceMealScreen}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="BuddyChat"
         component={BuddyChatScreen}
         options={{
           animation: 'slide_from_bottom',
@@ -166,9 +184,16 @@ const MainNavigator = () => {
           animation: 'slide_from_right',
         }}
       />
-      <Stack.Screen 
-        name="Profile" 
+      <Stack.Screen
+        name="Profile"
         component={ProfileScreen}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="KitchenItems"
+        component={KitchenItemsScreen}
         options={{
           animation: 'slide_from_right',
         }}
