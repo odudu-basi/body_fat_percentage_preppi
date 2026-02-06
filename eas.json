@@ -9,6 +9,11 @@
       "distribution": "internal",
       "ios": {
         "simulator": false
+      },
+      "env": {
+        "TIKTOK_ACCESS_TOKEN": "TTFEoUF5oHCl3NPwX0HGaYq2AsJHfSjF",
+        "TIKTOK_APP_ID": "6749189825",
+        "TIKTOK_TIKTOK_APP_ID": "7603276887116316680"
       }
     },
     "development-simulator": {
@@ -22,6 +27,11 @@
       "distribution": "internal"
     },
     "production": {
+      "env": {
+        "TIKTOK_ACCESS_TOKEN": "TTFEoUF5oHCl3NPwX0HGaYq2AsJHfSjF",
+        "TIKTOK_APP_ID": "6749189825",
+        "TIKTOK_TIKTOK_APP_ID": "7603276887116316680"
+      }
     }
   },
   "submit": {

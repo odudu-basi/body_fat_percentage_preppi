@@ -2,7 +2,7 @@
   "expo": {
     "name": "BodyMaxx",
     "slug": "Body_percentage_preppi",
-    "version": "2.9.2",
+    "version": "2.9.3",
     "orientation": "portrait",
     "icon": "./assets/splash-icon.png",
     "userInterfaceStyle": "dark",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "-5.Preppi-AI",
-      "buildNumber": "19",
+      "buildNumber": "20",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
