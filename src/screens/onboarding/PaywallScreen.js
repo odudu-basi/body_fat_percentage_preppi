@@ -3,15 +3,16 @@ import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { Colors, Fonts, Spacing } from '../../constants/theme';
 import { trackPaywallView, trackSubscriptionPurchase } from '../../utils/analytics';
+import { trackTikTokSubscribe, trackTikTokPurchase } from '../../services/tiktokTracking';
 import { useSubscription } from '../../context/SubscriptionContext';
 import { useAuth } from '../../context/AuthContext';
+import LoadingIndicator from '../../components/common/LoadingIndicator';
 
 // Check if we're in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -46,8 +47,7 @@ const PaywallScreen = () => {
     return (
       <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.dark.primary} />
-          <Text style={styles.loadingText}>Redirecting...</Text>
+          <LoadingIndicator text="Redirecting..." />
         </View>
       </View>
     );
@@ -79,6 +79,10 @@ const PaywallScreen = () => {
 
       // Track purchase (any dismiss = user went through purchase flow)
       trackSubscriptionPurchase('pro_subscription', 0);
+
+      // TikTok: subscription confirmed
+      trackTikTokSubscribe(0);
+      trackTikTokPurchase(0);
       console.log('[PaywallScreen] Purchase tracked, user completed paywall flow');
     },
   });
@@ -141,8 +145,7 @@ const PaywallScreen = () => {
   return (
     <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.dark.primary} />
-        <Text style={styles.loadingText}>Loading subscription...</Text>
+        <LoadingIndicator text="Loading subscription..." />
         {placementState && (
           <Text style={styles.debugText}>
             State: {JSON.stringify(placementState)}

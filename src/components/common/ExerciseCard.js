@@ -17,11 +17,19 @@ const ExerciseCard = ({
   isChecked = false,
   onToggle,
   onPress,
+  onCardPress,
   onLongPress,
 }) => {
-  const handlePress = () => {
+  const handleCheckboxPress = (e) => {
+    e.stopPropagation();
     if (onToggle) {
       onToggle();
+    }
+  };
+
+  const handleCardPress = () => {
+    if (onCardPress) {
+      onCardPress();
     } else if (onPress) {
       onPress();
     }
@@ -30,7 +38,7 @@ const ExerciseCard = ({
   return (
     <TouchableOpacity
       style={styles.container}
-      onPress={handlePress}
+      onPress={handleCardPress}
       onLongPress={onLongPress}
       delayLongPress={500}
       activeOpacity={0.8}
@@ -45,7 +53,7 @@ const ExerciseCard = ({
             styles.checkbox,
             isChecked && styles.checkboxChecked
           ]}
-          onPress={handlePress}
+          onPress={handleCheckboxPress}
           activeOpacity={0.7}
         >
           {isChecked && (

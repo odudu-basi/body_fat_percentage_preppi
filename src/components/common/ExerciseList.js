@@ -18,6 +18,7 @@ import ExerciseCard from './ExerciseCard';
 import {
   getTodaysExercises,
   addExercise,
+  updateExercise,
   toggleExerciseCompletion,
   deleteExercise,
 } from '../../services/exerciseStorage';
@@ -52,6 +53,12 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
     icon: 'fitness',
   });
   const [saving, setSaving] = useState(false);
+
+  // Edit exercise modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingExercise, setEditingExercise] = useState(null);
+  const [editedDuration, setEditedDuration] = useState('');
+  const [editedCalories, setEditedCalories] = useState('');
 
   // Helper to determine exercise type (cardio or weightlifting)
   const getExerciseType = (exerciseTitle) => {
@@ -275,6 +282,69 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
     resetNewExercise();
   };
 
+  // Handle opening edit modal
+  const handleEditExercise = (exercise) => {
+    setEditingExercise(exercise);
+    setEditedDuration(exercise.duration || '');
+    setEditedCalories(String(exercise.calories || ''));
+    setShowEditModal(true);
+  };
+
+  // Handle saving edited exercise
+  const handleSaveEdit = async () => {
+    if (!editedCalories || parseInt(editedCalories) <= 0) {
+      Alert.alert('Error', 'Please enter valid calories.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await updateExercise(editingExercise.id, {
+        duration: editedDuration,
+        calories: editedCalories,
+      });
+
+      if (result) {
+        // Update local state
+        setExercises(prev => prev.map(ex =>
+          ex.id === editingExercise.id
+            ? { ...ex, duration: editedDuration, calories: parseInt(editedCalories) }
+            : ex
+        ));
+
+        // Recalculate burned calories
+        const updatedExercises = exercises.map(ex =>
+          ex.id === editingExercise.id
+            ? { ...ex, duration: editedDuration, calories: parseInt(editedCalories) }
+            : ex
+        );
+        const burnedCalories = updatedExercises
+          .filter(ex => ex.is_completed)
+          .reduce((total, ex) => total + (ex.calories || 0), 0);
+        if (onExerciseCaloriesChange) {
+          onExerciseCaloriesChange(burnedCalories);
+        }
+
+        setShowEditModal(false);
+        setEditingExercise(null);
+      } else {
+        Alert.alert('Error', 'Failed to update exercise. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error updating exercise:', error);
+      Alert.alert('Error', 'Failed to update exercise. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setEditingExercise(null);
+    setEditedDuration('');
+    setEditedCalories('');
+  };
+
   // Get all available exercises
   const allExercises = [...CARDIO_EXERCISES, ...WEIGHTLIFTING_EXERCISES];
 
@@ -344,6 +414,7 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
               icon={exercise.icon}
               isChecked={exercise.is_completed}
               onToggle={() => handleToggleExercise(exercise.id)}
+              onCardPress={() => handleEditExercise(exercise)}
               onLongPress={() => exercise.is_custom && handleDeleteExercise(exercise.id)}
             />
           ))
@@ -572,6 +643,69 @@ const ExerciseList = ({ onExerciseCaloriesChange }) => {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Edit Exercise Modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={handleCloseEditModal}
+      >
+        <View style={styles.editModalOverlay}>
+          <View style={styles.editModalContent}>
+            <Text style={styles.editModalTitle}>Edit Exercise</Text>
+            <Text style={styles.editModalSubtitle}>{editingExercise?.title}</Text>
+
+            {/* Duration Input */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Duration</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g., 30 min"
+                placeholderTextColor={Colors.dark.textSecondary}
+                value={editedDuration}
+                onChangeText={setEditedDuration}
+              />
+            </View>
+
+            {/* Calories Input */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Calories Burned *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g., 300"
+                placeholderTextColor={Colors.dark.textSecondary}
+                value={editedCalories}
+                onChangeText={(text) => setEditedCalories(text.replace(/[^0-9]/g, ''))}
+                keyboardType="numeric"
+              />
+            </View>
+
+            {/* Buttons */}
+            <View style={styles.editModalButtons}>
+              <TouchableOpacity
+                style={[styles.editModalButton, styles.editModalButtonCancel]}
+                onPress={handleCloseEditModal}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.editModalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editModalButton, styles.editModalButtonSave]}
+                onPress={handleSaveEdit}
+                disabled={saving}
+                activeOpacity={0.7}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.editModalButtonTextSave}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -852,6 +986,67 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     fontSize: Fonts.sizes.xs,
     color: Colors.dark.textSecondary,
+  },
+
+  // Edit Modal Styles
+  editModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+  },
+  editModalContent: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+  },
+  editModalTitle: {
+    fontFamily: 'Rubik_700Bold',
+    fontSize: Fonts.sizes.xl,
+    color: Colors.dark.textPrimary,
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  editModalSubtitle: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing.xl,
+    textAlign: 'center',
+  },
+  editModalButtons: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  editModalButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  editModalButtonCancel: {
+    backgroundColor: Colors.dark.background,
+    borderWidth: 1,
+    borderColor: Colors.dark.textSecondary,
+  },
+  editModalButtonSave: {
+    backgroundColor: Colors.dark.primary,
+  },
+  editModalButtonTextCancel: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textSecondary,
+  },
+  editModalButtonTextSave: {
+    fontFamily: 'Rubik_700Bold',
+    fontSize: Fonts.sizes.md,
+    color: '#FFFFFF',
   },
 });
 

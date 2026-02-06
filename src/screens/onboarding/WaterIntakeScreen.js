@@ -25,7 +25,7 @@ const WaterIntakeScreen = () => {
   };
 
   const handleNext = () => {
-    navigation.navigate('BodyFatCosts', {
+    navigation.navigate('FoodStruggles', {
       ...route.params,
       waterIntake: waterLitres,
     });

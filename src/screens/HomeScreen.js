@@ -7,8 +7,11 @@ import {
   TouchableOpacity,
   Dimensions,
   ScrollView,
-  ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -17,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import DailyCalorieCard from '../components/common/DailyCalorieCard';
 import SettingsButton from '../components/common/SettingsButton';
+import LoadingIndicator from '../components/common/LoadingIndicator';
 import { getTodaysCalories, saveMeal, deleteMeal } from '../services/mealStorage';
 import { getTodaysBurnedCalories } from '../services/exerciseStorage';
 import { generateDailyMealPlan } from '../services/mealPlanGeneration';
@@ -24,6 +28,7 @@ import { generateMealPlanImages } from '../services/imageGeneration';
 import { saveDailyMealPlan, getMealPlanForDate, updateMealCompletion } from '../services/mealPlanStorage';
 import { useAuth } from '../context/AuthContext';
 import { trackLogoPress } from '../utils/analytics';
+import { trackTikTokViewContent } from '../services/tiktokTracking';
 import { getLocalDateString } from '../utils/dateUtils';
 
 const { width } = Dimensions.get('window');
@@ -31,13 +36,20 @@ const { width } = Dimensions.get('window');
 const HomeScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { profile, user, isAuthenticated } = useAuth();
+  const { profile, user, isAuthenticated, updateProfile } = useAuth();
   const [totalCalories, setTotalCalories] = useState(0);
   const [exerciseCalories, setExerciseCalories] = useState(0);
   const [selectedDayIndex, setSelectedDayIndex] = useState(new Date().getDay());
   const [todayDayIndex] = useState(new Date().getDay()); // Track today's day index
   const [mealPlan, setMealPlan] = useState(null);
   const [isGeneratingMeals, setIsGeneratingMeals] = useState(false);
+  const [mealGenerationProgress, setMealGenerationProgress] = useState(0);
+
+  // Weight editing state
+  const [showCurrentWeightModal, setShowCurrentWeightModal] = useState(false);
+  const [showTargetWeightModal, setShowTargetWeightModal] = useState(false);
+  const [currentWeightInput, setCurrentWeightInput] = useState('');
+  const [targetWeightInput, setTargetWeightInput] = useState('');
 
   // Load data when screen comes into focus
   useFocusEffect(
@@ -91,6 +103,9 @@ const HomeScreen = () => {
       }
     };
     loadInitialData();
+
+    // TikTok: user reached the home screen (ViewContent)
+    trackTikTokViewContent();
   }, []);
 
   const handleLogoPress = () => {
@@ -147,25 +162,33 @@ const HomeScreen = () => {
 
     try {
       setIsGeneratingMeals(true);
+      setMealGenerationProgress(0);
 
+      // Stage 1: Generating meal plan (0-40%)
       console.log('[HomeScreen] Generating meal plan...');
+      setMealGenerationProgress(20);
       const mealPlanResult = await generateDailyMealPlan(profile);
 
       if (!mealPlanResult.success) {
         throw new Error(mealPlanResult.error);
       }
+      setMealGenerationProgress(40);
 
+      // Stage 2: Generating meal images (40-80%)
       console.log('[HomeScreen] Generating meal images...');
       const mealsWithImages = await generateMealPlanImages(mealPlanResult.data.meals);
+      setMealGenerationProgress(80);
 
       const finalMealPlan = {
         ...mealPlanResult.data,
         meals: mealsWithImages,
       };
 
+      // Stage 3: Saving meal plan (80-100%)
       console.log('[HomeScreen] Saving meal plan...');
       const dateStr = getDateForDayIndex(selectedDayIndex);
       await saveDailyMealPlan(dateStr, finalMealPlan);
+      setMealGenerationProgress(100);
 
       console.log('[HomeScreen] Meal plan created successfully!');
       setMealPlan(finalMealPlan);
@@ -176,6 +199,7 @@ const HomeScreen = () => {
       Alert.alert('Error', 'Failed to create meal plan. Please try again.');
     } finally {
       setIsGeneratingMeals(false);
+      setMealGenerationProgress(0);
     }
   };
 
@@ -193,6 +217,20 @@ const HomeScreen = () => {
         // Checking the meal - save to meal_logs with the selected day's date
         console.log('[HomeScreen] Saving meal to logs:', meal.name, 'for date:', dateStr);
 
+        // Transform meal plan ingredients (strings) to structured format for NutritionResultsScreen
+        const structuredIngredients = (meal.ingredients || []).map(ingredient => {
+          // If already an object, return as is
+          if (typeof ingredient === 'object' && ingredient.name) {
+            return ingredient;
+          }
+          // If string, convert to structured format
+          return {
+            name: typeof ingredient === 'string' ? ingredient : String(ingredient),
+            portion: meal.portion_details || 'As specified',
+            calories: 0, // Will be distributed evenly if needed
+          };
+        });
+
         const mealData = {
           meal_name: meal.name,
           meal_time: meal.meal_type,
@@ -208,7 +246,7 @@ const HomeScreen = () => {
           servings: 1,
           notes: `From meal plan: ${dateStr}`,
           photo_uri: meal.image_uri || null,
-          ingredients: meal.ingredients || [],
+          ingredients: structuredIngredients,
           confidence: 'high',
           date: dateStr, // Pass the selected day's date
         };
@@ -275,6 +313,56 @@ const HomeScreen = () => {
     }
   };
 
+  // Handle current weight edit
+  const handleCurrentWeightPress = () => {
+    const weightLbs = profile?.weight_kg ? Math.round(profile.weight_kg * 2.20462) : '';
+    setCurrentWeightInput(weightLbs.toString());
+    setShowCurrentWeightModal(true);
+  };
+
+  const handleSaveCurrentWeight = async () => {
+    const weightLbs = parseFloat(currentWeightInput);
+    if (isNaN(weightLbs) || weightLbs <= 0) {
+      Alert.alert('Invalid Weight', 'Please enter a valid weight.');
+      return;
+    }
+
+    try {
+      const weightKg = weightLbs / 2.20462;
+      await updateProfile({ weight_kg: weightKg });
+      setShowCurrentWeightModal(false);
+      Alert.alert('Success', 'Current weight updated!');
+    } catch (error) {
+      console.error('[HomeScreen] Error updating weight:', error);
+      Alert.alert('Error', 'Failed to update weight. Please try again.');
+    }
+  };
+
+  // Handle target weight edit
+  const handleTargetWeightPress = () => {
+    const weightLbs = profile?.target_weight_kg ? Math.round(profile.target_weight_kg * 2.20462) : '';
+    setTargetWeightInput(weightLbs.toString());
+    setShowTargetWeightModal(true);
+  };
+
+  const handleSaveTargetWeight = async () => {
+    const weightLbs = parseFloat(targetWeightInput);
+    if (isNaN(weightLbs) || weightLbs <= 0) {
+      Alert.alert('Invalid Weight', 'Please enter a valid weight.');
+      return;
+    }
+
+    try {
+      const weightKg = weightLbs / 2.20462;
+      await updateProfile({ target_weight_kg: weightKg });
+      setShowTargetWeightModal(false);
+      Alert.alert('Success', 'Target weight updated!');
+    } catch (error) {
+      console.error('[HomeScreen] Error updating target weight:', error);
+      Alert.alert('Error', 'Failed to update target weight. Please try again.');
+    }
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
       {/* Header with Logo and Settings */}
@@ -306,7 +394,11 @@ const HomeScreen = () => {
         {/* Weight Cards */}
         <View style={styles.weightCardsContainer}>
           {/* Current Weight Card */}
-          <View style={styles.weightCard}>
+          <TouchableOpacity
+            style={styles.weightCard}
+            onPress={handleCurrentWeightPress}
+            activeOpacity={0.7}
+          >
             <Text style={styles.weightCardLabel}>Current Weight</Text>
             <Text style={styles.weightCardValue}>
               {profile?.weight_kg ? `${Math.round(profile.weight_kg * 2.20462)} lbs` : 'N/A'}
@@ -316,13 +408,24 @@ const HomeScreen = () => {
                 {Math.round(profile.weight_kg)} kg
               </Text>
             )}
-          </View>
+          </TouchableOpacity>
 
           {/* Target Weight Card */}
-          <View style={styles.weightCard}>
+          <TouchableOpacity
+            style={styles.weightCard}
+            onPress={handleTargetWeightPress}
+            activeOpacity={0.7}
+          >
             <Text style={styles.weightCardLabel}>Target Weight</Text>
-            <Text style={styles.weightCardValue}>N/A</Text>
-          </View>
+            <Text style={styles.weightCardValue}>
+              {profile?.target_weight_kg ? `${Math.round(profile.target_weight_kg * 2.20462)} lbs` : 'N/A'}
+            </Text>
+            {profile?.target_weight_kg && (
+              <Text style={styles.weightCardSubtext}>
+                {Math.round(profile.target_weight_kg)} kg
+              </Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Day Slider */}
@@ -356,9 +459,11 @@ const HomeScreen = () => {
           {/* Content for selected day */}
           {isGeneratingMeals ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={Colors.dark.primary} />
-              <Text style={styles.loadingText}>Generating your meal plan...</Text>
-              <Text style={styles.loadingSubtext}>This may take a moment</Text>
+              <LoadingIndicator
+                text="Generating your meal plan..."
+                subtext="This may take a moment"
+                progress={mealGenerationProgress}
+              />
             </View>
           ) : mealPlan && mealPlan.meals ? (
             <View style={styles.mealCardsContainer}>
@@ -436,6 +541,92 @@ const HomeScreen = () => {
           />
         </View>
       </ScrollView>
+
+      {/* Current Weight Edit Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showCurrentWeightModal}
+        onRequestClose={() => setShowCurrentWeightModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalContainer}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Update Current Weight</Text>
+            <Text style={styles.modalSubtitle}>Enter your current weight in pounds</Text>
+
+            <TextInput
+              style={styles.modalInput}
+              value={currentWeightInput}
+              onChangeText={setCurrentWeightInput}
+              placeholder="e.g., 180"
+              placeholderTextColor={Colors.dark.textSecondary}
+              keyboardType="numeric"
+              autoFocus
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowCurrentWeightModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSave]}
+                onPress={handleSaveCurrentWeight}
+              >
+                <Text style={styles.modalButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Target Weight Edit Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showTargetWeightModal}
+        onRequestClose={() => setShowTargetWeightModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalContainer}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Update Target Weight</Text>
+            <Text style={styles.modalSubtitle}>Enter your target weight in pounds</Text>
+
+            <TextInput
+              style={styles.modalInput}
+              value={targetWeightInput}
+              onChangeText={setTargetWeightInput}
+              placeholder="e.g., 165"
+              placeholderTextColor={Colors.dark.textSecondary}
+              keyboardType="numeric"
+              autoFocus
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowTargetWeightModal(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSave]}
+                onPress={handleSaveTargetWeight}
+              >
+                <Text style={styles.modalButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 };
@@ -653,6 +844,69 @@ const styles = StyleSheet.create({
   checkboxChecked: {
     backgroundColor: Colors.dark.primary,
     borderColor: Colors.dark.primary,
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '85%',
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+  },
+  modalTitle: {
+    fontFamily: 'Rubik_700Bold',
+    fontSize: Fonts.sizes.xl,
+    color: Colors.dark.textPrimary,
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: Fonts.sizes.sm,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing.lg,
+    textAlign: 'center',
+  },
+  modalInput: {
+    backgroundColor: Colors.dark.background,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontFamily: 'Inter_400Regular',
+    fontSize: Fonts.sizes.lg,
+    color: Colors.dark.textPrimary,
+    marginBottom: Spacing.lg,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  modalButton: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: Colors.dark.background,
+  },
+  modalButtonSave: {
+    backgroundColor: Colors.dark.primary,
+  },
+  modalButtonText: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.md,
+    color: '#FFFFFF',
+  },
+  modalButtonTextCancel: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textPrimary,
   },
 });
 

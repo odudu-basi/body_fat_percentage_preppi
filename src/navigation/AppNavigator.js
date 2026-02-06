@@ -17,11 +17,16 @@ import {
   HeightWeightScreen,
   EthnicityScreen,
   WorkoutFrequencyScreen,
+  TargetWeightScreen,
+  TargetBodyFatScreen,
   WaterIntakeScreen,
+  FoodStrugglesScreen,
+  ExerciseStrugglesScreen,
   BodyFatCostsScreen,
+  OnboardingKitchenItemsScreen,
+  AllergiesScreen,
   DifficultyScreen,
   TestimonialsScreen,
-  AccuracyScreen,
   PaywallScreen,
 } from '../screens/onboarding';
 import LoginScreen from '../screens/LoginScreen';
@@ -38,6 +43,7 @@ import ScanDetailsScreen from '../screens/ScanDetailsScreen';
 import NutritionResultsScreen from '../screens/NutritionResultsScreen';
 import MealDetailsScreen from '../screens/MealDetailsScreen';
 import KitchenItemsScreen from '../screens/KitchenItemsScreen';
+import MainAllergiesScreen from '../screens/AllergiesScreen';
 import ReplaceMealScreen from '../screens/ReplaceMealScreen';
 import CustomTabBar from '../components/common/CustomTabBar';
 import { Colors } from '../constants/theme';
@@ -95,11 +101,16 @@ const AuthNavigator = () => {
       <AuthStack.Screen name="HeightWeight" component={HeightWeightScreen} />
       <AuthStack.Screen name="Ethnicity" component={EthnicityScreen} />
       <AuthStack.Screen name="WorkoutFrequency" component={WorkoutFrequencyScreen} />
+      <AuthStack.Screen name="TargetWeight" component={TargetWeightScreen} />
+      <AuthStack.Screen name="TargetBodyFat" component={TargetBodyFatScreen} />
       <AuthStack.Screen name="WaterIntake" component={WaterIntakeScreen} />
+      <AuthStack.Screen name="FoodStruggles" component={FoodStrugglesScreen} />
+      <AuthStack.Screen name="ExerciseStruggles" component={ExerciseStrugglesScreen} />
       <AuthStack.Screen name="BodyFatCosts" component={BodyFatCostsScreen} />
+      <AuthStack.Screen name="OnboardingKitchenItems" component={OnboardingKitchenItemsScreen} />
+      <AuthStack.Screen name="Allergies" component={AllergiesScreen} />
       <AuthStack.Screen name="Difficulty" component={DifficultyScreen} />
       <AuthStack.Screen name="Testimonials" component={TestimonialsScreen} />
-      <AuthStack.Screen name="Accuracy" component={AccuracyScreen} />
       <AuthStack.Screen name="Paywall" component={PaywallScreen} />
       <AuthStack.Screen name="Login" component={LoginScreen} />
     </AuthStack.Navigator>
@@ -194,6 +205,13 @@ const MainNavigator = () => {
       <Stack.Screen
         name="KitchenItems"
         component={KitchenItemsScreen}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="Allergies"
+        component={MainAllergiesScreen}
         options={{
           animation: 'slide_from_right',
         }}

@@ -23,6 +23,7 @@ import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import { analyzeFoodPhoto } from '../services/foodAnalysis';
 import { saveMeal, updateMeal, formatMealForStorage } from '../services/mealStorage';
 import { trackMealLog } from '../utils/analytics';
+import { CLAUDE_API_KEY } from '@env';
 
 const { width } = Dimensions.get('window');
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -153,7 +154,8 @@ const NutritionResultsScreen = ({ route, navigation }) => {
   const [loadingProgress, setLoadingProgress] = useState(existingMeal ? 100 : 0);
   const [servings, setServings] = useState(existingMeal?.servings || 1);
   const [showAdjustSheet, setShowAdjustSheet] = useState(false);
-  const [adjustedCalories, setAdjustedCalories] = useState('');
+  const [adjustmentInstructions, setAdjustmentInstructions] = useState('');
+  const [isAdjusting, setIsAdjusting] = useState(false);
   const [macroPage, setMacroPage] = useState(0);
   const [showServingsSheet, setShowServingsSheet] = useState(false);
   const [tempServings, setTempServings] = useState('1');
@@ -283,21 +285,156 @@ const NutritionResultsScreen = ({ route, navigation }) => {
   };
 
   const handleAdjustCalories = () => {
-    // Open the adjust calories sheet with current displayed calories
-    const currentCalories = calorieOverride !== null 
-      ? calorieOverride 
-      : Math.round((analysisResult?.total_calories || 0) * servings);
-    setAdjustedCalories(currentCalories.toString());
+    // Clear previous instructions and open adjustment sheet
+    setAdjustmentInstructions('');
     setShowAdjustSheet(true);
   };
 
-  const handleUpdateCalories = () => {
-    // Set the calorie override
-    const newCalories = parseInt(adjustedCalories, 10);
-    if (!isNaN(newCalories) && newCalories >= 0) {
-      setCalorieOverride(newCalories);
+  const handleApplyAdjustments = async () => {
+    if (!adjustmentInstructions.trim()) {
+      Alert.alert('No Instructions', 'Please describe what changes you want to make.');
+      return;
     }
-    setShowAdjustSheet(false);
+
+    setIsAdjusting(true);
+
+    try {
+      console.log('[AI Adjustment] Starting meal adjustment with instructions:', adjustmentInstructions);
+
+      // Build the prompt for Claude
+      const currentMealData = {
+        meal_name: analysisResult.meal_name,
+        total_calories: getDisplayedCalories(),
+        macros: {
+          protein_g: getAdjustedValue(analysisResult.macros?.protein_g || 0),
+          carbs_g: getAdjustedValue(analysisResult.macros?.carbs_g || 0),
+          fat_g: getAdjustedValue(analysisResult.macros?.fat_g || 0),
+          fiber_g: getAdjustedValue(analysisResult.macros?.fiber_g || 0),
+          sugar_g: getAdjustedValue(analysisResult.macros?.sugar_g || 0),
+          sodium_mg: getAdjustedValue(analysisResult.macros?.sodium_mg || 0),
+        },
+        ingredients: ingredients,
+      };
+
+      const prompt = `You are a nutrition expert. The user has a meal with the following data:
+
+${JSON.stringify(currentMealData, null, 2)}
+
+The user wants to make the following changes:
+"${adjustmentInstructions}"
+
+Please apply these changes to the meal data. Adjust the calories, macros, and ingredients as needed to reflect the user's request. Be precise and realistic with your adjustments.
+
+**Return ONLY this JSON format (no other text):**
+
+{
+  "meal_name": "Updated meal name if needed",
+  "total_calories": <number>,
+  "macros": {
+    "protein_g": <number>,
+    "carbs_g": <number>,
+    "fat_g": <number>,
+    "fiber_g": <number>,
+    "sugar_g": <number>,
+    "sodium_mg": <number>
+  },
+  "ingredients": [
+    {
+      "name": "Ingredient name",
+      "portion": "portion size (e.g., '1 cup', '150g')",
+      "calories": <number>,
+      "protein_g": <number>,
+      "carbs_g": <number>,
+      "fat_g": <number>
+    }
+  ],
+  "notes": "Brief explanation of what was changed"
+}`;
+
+      // Make API call to Claude
+      const requestBody = {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+      };
+
+      console.log('[AI Adjustment] Sending request to Claude...');
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': CLAUDE_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[AI Adjustment] Claude API Error:', errorData);
+        throw new Error(errorData.error?.message || 'Failed to adjust meal');
+      }
+
+      const data = await response.json();
+      const content = data.content?.[0]?.text;
+
+      console.log('[AI Adjustment] Claude Response:', content);
+
+      if (!content) {
+        throw new Error('No response from AI');
+      }
+
+      // Parse the JSON response
+      let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
+      // Try to find JSON in the response
+      const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanedContent = jsonMatch[0];
+      }
+
+      const adjustedMealData = JSON.parse(cleanedContent);
+      console.log('[AI Adjustment] Meal adjustment successful');
+
+      // Update the analysis result with new data
+      setAnalysisResult(prev => ({
+        ...prev,
+        meal_name: adjustedMealData.meal_name,
+        total_calories: adjustedMealData.total_calories / servings, // Store base value
+        macros: {
+          protein_g: adjustedMealData.macros.protein_g / servings,
+          carbs_g: adjustedMealData.macros.carbs_g / servings,
+          fat_g: adjustedMealData.macros.fat_g / servings,
+          fiber_g: adjustedMealData.macros.fiber_g / servings,
+          sugar_g: adjustedMealData.macros.sugar_g / servings,
+          sodium_mg: adjustedMealData.macros.sodium_mg / servings,
+        },
+        notes: adjustedMealData.notes,
+      }));
+
+      // Update ingredients
+      setIngredients(adjustedMealData.ingredients);
+
+      // Set calorie override to the adjusted value
+      setCalorieOverride(adjustedMealData.total_calories);
+
+      setShowAdjustSheet(false);
+    } catch (error) {
+      console.error('[AI Adjustment] Error:', error);
+      Alert.alert(
+        'Adjustment Failed',
+        error.message || 'Failed to adjust meal. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsAdjusting(false);
+    }
   };
 
   const handleOpenServingsSheet = () => {
@@ -616,7 +753,7 @@ const NutritionResultsScreen = ({ route, navigation }) => {
       <View style={[styles.bottomActions, { paddingBottom: insets.bottom + Spacing.md }]}>
         <TouchableOpacity style={styles.adjustButton} onPress={handleAdjustCalories}>
           <Ionicons name="create-outline" size={20} color={Colors.dark.textPrimary} />
-          <Text style={styles.adjustButtonText}>Adjust Calories</Text>
+          <Text style={styles.adjustButtonText}>Adjust</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.doneButton} onPress={handleDone}>
           <Text style={styles.doneButtonText}>Done</Text>
@@ -641,27 +778,34 @@ const NutritionResultsScreen = ({ route, navigation }) => {
           />
           <View style={[styles.sheetContent, { paddingBottom: insets.bottom + Spacing.lg }]}>
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Adjust Calories</Text>
-            <Text style={styles.sheetSubtitle}>Enter the correct calorie amount</Text>
-            
-            <View style={styles.calorieInputContainer}>
+            <Text style={styles.sheetTitle}>Adjust Meal</Text>
+            <Text style={styles.sheetSubtitle}>Describe what you'd like to change</Text>
+
+            <View style={styles.instructionsInputContainer}>
               <TextInput
-                style={styles.calorieInput}
-                value={adjustedCalories}
-                onChangeText={setAdjustedCalories}
-                keyboardType="numeric"
-                placeholder="0"
+                style={styles.instructionsInput}
+                value={adjustmentInstructions}
+                onChangeText={setAdjustmentInstructions}
+                placeholder="e.g., add more protein, reduce carbs, make it spicier"
                 placeholderTextColor={Colors.dark.textSecondary}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+                editable={!isAdjusting}
               />
-              <Text style={styles.calorieInputLabel}>calories</Text>
             </View>
 
-            <TouchableOpacity 
-              style={styles.updateButton} 
-              onPress={handleUpdateCalories}
+            <TouchableOpacity
+              style={[styles.updateButton, isAdjusting && styles.updateButtonDisabled]}
+              onPress={handleApplyAdjustments}
               activeOpacity={0.8}
+              disabled={isAdjusting}
             >
-              <Text style={styles.updateButtonText}>Update</Text>
+              {isAdjusting ? (
+                <Text style={styles.updateButtonText}>Adjusting...</Text>
+              ) : (
+                <Text style={styles.updateButtonText}>Apply Changes</Text>
+              )}
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -1273,6 +1417,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik_700Bold',
     fontSize: Fonts.sizes.lg,
     color: '#FFFFFF',
+  },
+  updateButtonDisabled: {
+    opacity: 0.6,
+  },
+  // Instructions input
+  instructionsInputContainer: {
+    marginBottom: Spacing.xl,
+  },
+  instructionsInput: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textPrimary,
+    backgroundColor: Colors.dark.background,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 100,
   },
   // Servings Sheet
   servingsInputContainer: {

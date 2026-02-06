@@ -28,11 +28,11 @@ export const CARDIO_EXERCISES = [
     icon: 'bicycle',
   },
   {
-    title: 'Swimming',
-    description: 'Full-body, low-impact workout',
+    title: 'Incline Treadmill Walk',
+    description: 'Low-impact fat burning cardio',
     duration: '30 min',
-    calories: 350,
-    icon: 'water',
+    calories: 280,
+    icon: 'walk',
   },
   {
     title: 'Stair Climbing',

@@ -10,26 +10,20 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
-const WORKOUT_OPTIONS = [
-  { id: '0-2', label: '0-2', sublabel: 'Workouts per week' },
-  { id: '3-5', label: '3-5', sublabel: 'Workouts per week' },
-  { id: '6+', label: '6+', sublabel: 'Workouts per week' },
-];
-
-const WorkoutFrequencyScreen = () => {
+const FoodStrugglesScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
-  const [selectedFrequency, setSelectedFrequency] = useState('3-5');
+  const [selectedAnswer, setSelectedAnswer] = useState('yes');
 
   const handleBack = () => {
     navigation.goBack();
   };
 
   const handleNext = () => {
-    navigation.navigate('TargetWeight', {
+    navigation.navigate('ExerciseStruggles', {
       ...route.params,
-      workoutFrequency: selectedFrequency,
+      foodStruggles: selectedAnswer,
     });
   };
 
@@ -47,7 +41,7 @@ const WorkoutFrequencyScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '90%' }]} />
+            <View style={[styles.progressBarFill, { width: '55%' }]} />
           </View>
         </View>
 
@@ -59,46 +53,73 @@ const WorkoutFrequencyScreen = () => {
 
       {/* Content */}
       <View style={styles.content}>
-        <Text style={styles.title}>Weekly workout</Text>
-        <Text style={styles.subtitle}>
-          This will be used to predict your height potential & create your custom plan.
-        </Text>
+        <View style={styles.iconCircle}>
+          <Text style={styles.iconEmoji}>🍽️</Text>
+        </View>
 
-        {/* Workout Options */}
+        <Text style={styles.title}>Do you struggle with what to eat when trying to lose body fat?</Text>
+
+        {/* Options */}
         <View style={styles.optionsContainer}>
-          {WORKOUT_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={option.id}
-              style={[
-                styles.optionButton,
-                selectedFrequency === option.id && styles.optionButtonSelected,
-              ]}
-              onPress={() => setSelectedFrequency(option.id)}
-              activeOpacity={0.7}
-            >
-              {/* Radio/Check Icon */}
-              <View style={styles.optionIconContainer}>
-                {selectedFrequency === option.id ? (
-                  <Ionicons name="checkmark-circle" size={28} color={Colors.dark.primary} />
-                ) : (
-                  <View style={styles.radioCircle} />
-                )}
-              </View>
+          <TouchableOpacity
+            style={[
+              styles.optionButton,
+              selectedAnswer === 'yes' && styles.optionButtonSelected,
+            ]}
+            onPress={() => setSelectedAnswer('yes')}
+            activeOpacity={0.7}
+          >
+            {/* Radio/Check Icon */}
+            <View style={styles.optionIconContainer}>
+              {selectedAnswer === 'yes' ? (
+                <Ionicons name="checkmark-circle" size={28} color={Colors.dark.primary} />
+              ) : (
+                <View style={styles.radioCircle} />
+              )}
+            </View>
 
-              {/* Text */}
-              <View style={styles.optionTextContainer}>
-                <Text
-                  style={[
-                    styles.optionLabel,
-                    selectedFrequency === option.id && styles.optionLabelSelected,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-                <Text style={styles.optionSublabel}>{option.sublabel}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+            {/* Text */}
+            <View style={styles.optionTextContainer}>
+              <Text
+                style={[
+                  styles.optionLabel,
+                  selectedAnswer === 'yes' && styles.optionLabelSelected,
+                ]}
+              >
+                Yes
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.optionButton,
+              selectedAnswer === 'no' && styles.optionButtonSelected,
+            ]}
+            onPress={() => setSelectedAnswer('no')}
+            activeOpacity={0.7}
+          >
+            {/* Radio/Check Icon */}
+            <View style={styles.optionIconContainer}>
+              {selectedAnswer === 'no' ? (
+                <Ionicons name="checkmark-circle" size={28} color={Colors.dark.primary} />
+              ) : (
+                <View style={styles.radioCircle} />
+              )}
+            </View>
+
+            {/* Text */}
+            <View style={styles.optionTextContainer}>
+              <Text
+                style={[
+                  styles.optionLabel,
+                  selectedAnswer === 'no' && styles.optionLabelSelected,
+                ]}
+              >
+                No
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -168,18 +189,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.xl,
   },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(232, 93, 4, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.xl,
+    alignSelf: 'center',
+  },
+  iconEmoji: {
+    fontSize: 40,
+  },
   title: {
     fontFamily: 'Rubik_700Bold',
     fontSize: Fonts.sizes.xxxl,
     color: Colors.dark.textPrimary,
-    marginBottom: Spacing.sm,
-  },
-  subtitle: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: Fonts.sizes.md,
-    color: Colors.dark.textSecondary,
-    lineHeight: 24,
     marginBottom: Spacing.xl * 2,
+    lineHeight: 36,
   },
   optionsContainer: {
     gap: Spacing.md,
@@ -216,15 +244,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik_700Bold',
     fontSize: Fonts.sizes.xl,
     color: Colors.dark.textPrimary,
-    marginBottom: 2,
   },
   optionLabelSelected: {
     color: Colors.dark.primary,
-  },
-  optionSublabel: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: Fonts.sizes.sm,
-    color: Colors.dark.textSecondary,
   },
   footer: {
     paddingHorizontal: Spacing.lg,
@@ -244,4 +266,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default WorkoutFrequencyScreen;
+export default FoodStrugglesScreen;

@@ -7,20 +7,26 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
-import { getBodyScans, deleteBodyScan } from '../services/bodyScanStorage';
+import { getBodyScans, deleteBodyScan, saveBodyScan } from '../services/bodyScanStorage';
 import BodyScanCard from '../components/common/BodyScanCard';
+import { useAuth } from '../context/AuthContext';
+import LoadingIndicator from '../components/common/LoadingIndicator';
 
 const ProgressPhotosScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { profile } = useAuth();
   const [scans, setScans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isTakingPhoto, setIsTakingPhoto] = useState(false);
 
   const loadScans = async () => {
     try {
@@ -47,6 +53,7 @@ const ProgressPhotosScreen = () => {
   };
 
   const handleScanPress = (scan) => {
+    // Just show the photo in a simple view, no complex scan details
     navigation.navigate('ScanDetails', { scanData: scan });
   };
 
@@ -54,6 +61,81 @@ const ProgressPhotosScreen = () => {
     const success = await deleteBodyScan(scanId);
     if (success) {
       setScans((prev) => prev.filter((scan) => scan.id !== scanId));
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      // Request camera permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Camera permission is required to take progress photos.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      setIsTakingPhoto(true);
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const photoUri = result.assets[0].uri;
+
+        // Get current weight from profile
+        const currentWeightKg = profile?.weight_kg || 0;
+        const currentWeightLbs = Math.round(currentWeightKg * 2.20462);
+
+        // Save the photo with current weight
+        const scanData = {
+          front_image_path: photoUri,
+          side_image_path: null, // No side photo needed
+          weight_kg: currentWeightKg,
+          weight_lbs: currentWeightLbs,
+          body_fat_percentage: null, // No body fat analysis
+          confidence_level: null,
+          confidence_low: null,
+          confidence_high: null,
+          height_cm: profile?.height_cm || 0,
+          age: profile?.age || 0,
+          gender: profile?.gender || 'male',
+          bmi: null,
+          ai_analysis: null,
+          front_observations: null,
+          side_observations: null,
+          primary_indicators: null,
+          biometric_notes: null,
+        };
+
+        await saveBodyScan(scanData);
+
+        // Reload scans to show the new photo
+        await loadScans();
+
+        Alert.alert(
+          'Progress Photo Saved',
+          `Photo saved with your current weight: ${currentWeightLbs} lbs`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert(
+        'Error',
+        'Failed to take photo. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsTakingPhoto(false);
     }
   };
 
@@ -70,18 +152,23 @@ const ProgressPhotosScreen = () => {
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconContainer}>
-        <Ionicons name="body-outline" size={64} color={Colors.dark.textSecondary} />
+        <Ionicons name="camera-outline" size={64} color={Colors.dark.textSecondary} />
       </View>
-      <Text style={styles.emptyTitle}>No Body Scans Yet</Text>
+      <Text style={styles.emptyTitle}>No Progress Photos Yet</Text>
       <Text style={styles.emptySubtitle}>
-        Complete your first body scan to start tracking your progress
+        Take your first progress photo to start tracking your journey
       </Text>
       <TouchableOpacity
         style={styles.startScanButton}
-        onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
+        onPress={handleTakePhoto}
         activeOpacity={0.8}
+        disabled={isTakingPhoto}
       >
-        <Text style={styles.startScanButtonText}>Start a Scan</Text>
+        {isTakingPhoto ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={styles.startScanButtonText}>Take Photo</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -98,14 +185,25 @@ const ProgressPhotosScreen = () => {
           <Ionicons name="chevron-back" size={28} color={Colors.dark.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Progress Photos</Text>
-        <View style={styles.headerRight} />
+        <TouchableOpacity
+          style={styles.cameraButton}
+          onPress={handleTakePhoto}
+          activeOpacity={0.7}
+          disabled={isTakingPhoto}
+        >
+          {isTakingPhoto ? (
+            <ActivityIndicator color={Colors.dark.primary} size="small" />
+          ) : (
+            <Ionicons name="camera" size={24} color={Colors.dark.primary} />
+          )}
+        </TouchableOpacity>
       </View>
 
-      {/* Scan count */}
+      {/* Photo count */}
       {scans.length > 0 && (
         <View style={styles.countContainer}>
           <Text style={styles.countText}>
-            {scans.length} {scans.length === 1 ? 'scan' : 'scans'} total
+            {scans.length} {scans.length === 1 ? 'photo' : 'photos'} total
           </Text>
         </View>
       )}
@@ -113,7 +211,7 @@ const ProgressPhotosScreen = () => {
       {/* Content */}
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.dark.primary} />
+          <LoadingIndicator text="Loading photos..." />
         </View>
       ) : (
         <FlatList
@@ -167,6 +265,14 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 40,
+  },
+  cameraButton: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.dark.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   countContainer: {
     paddingHorizontal: Spacing.lg,

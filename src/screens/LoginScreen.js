@@ -9,10 +9,12 @@ import {
   Alert,
   Platform,
   TextInput,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute } from '@react-navigation/native';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import Constants from 'expo-constants';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 
@@ -25,6 +27,9 @@ const LoginScreen = () => {
   const [isSignUp, setIsSignUp] = useState(true); // true = signup, false = signin
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  // Detect if running in Expo Go
+  const isExpoGo = Constants.appOwnership === 'expo';
 
   // Auto sign-in in dev mode - DISABLED
   // useEffect(() => {
@@ -121,6 +126,26 @@ const LoginScreen = () => {
     }
   };
 
+  const handlePrivacyPolicy = async () => {
+    const url = 'https://docs.google.com/document/d/1mXe679mfO1NQ2mP9ZdNAdvl0b3m9lEHV/edit';
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+    } else {
+      Alert.alert('Error', 'Unable to open Privacy Policy');
+    }
+  };
+
+  const handleTermsOfService = async () => {
+    const url = 'https://docs.google.com/document/d/1NH_MOmWCBbD4ZVtiQOqC5DsdOk7P147I/edit';
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+    } else {
+      Alert.alert('Error', 'Unable to open Terms of Service');
+    }
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Background gradient effect */}
@@ -139,24 +164,24 @@ const LoginScreen = () => {
 
       {/* Features Preview */}
       <View style={styles.featuresContainer}>
-        <FeatureItem 
-          icon="📊" 
-          title="Track Body Composition" 
-          description="AI-powered body fat analysis from photos"
+        <FeatureItem
+          icon="🍽️"
+          title="Curated Meal Plans"
+          description="Get curated meals designed to lose body fat"
         />
-        <FeatureItem 
-          icon="🍎" 
-          title="Smart Nutrition" 
+        <FeatureItem
+          icon="🍎"
+          title="Smart Nutrition"
           description="Log meals with photo recognition"
         />
-        <FeatureItem 
-          icon="💪" 
-          title="Personalized Routines" 
+        <FeatureItem
+          icon="💪"
+          title="Personalized Routines"
           description="Daily checklists tailored to your goals"
         />
-        <FeatureItem 
-          icon="🤖" 
-          title="AI Buddy" 
+        <FeatureItem
+          icon="🤖"
+          title="AI Buddy"
           description="Get instant answers to fitness questions"
         />
       </View>
@@ -191,21 +216,27 @@ const LoginScreen = () => {
 
         <Text style={styles.termsText}>
           By signing in, you agree to our{' '}
-          <Text style={styles.termsLink}>Terms of Service</Text>
+          <Text style={styles.termsLink} onPress={handleTermsOfService}>
+            Terms of Service
+          </Text>
           {' '}and{' '}
-          <Text style={styles.termsLink}>Privacy Policy</Text>
+          <Text style={styles.termsLink} onPress={handlePrivacyPolicy}>
+            Privacy Policy
+          </Text>
         </Text>
 
-        {/* Email/Password Auth Section */}
-        <TouchableOpacity
-          style={styles.emailToggleButton}
-          onPress={() => setShowEmailSignup(!showEmailSignup)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.emailToggleText}>
-            {showEmailSignup ? 'Hide' : 'Sign up without Apple'}
-          </Text>
-        </TouchableOpacity>
+        {/* Email/Password Auth Section - Shown in Expo Go */}
+        {isExpoGo && (
+          <TouchableOpacity
+            style={styles.emailToggleButton}
+            onPress={() => setShowEmailSignup(!showEmailSignup)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.emailToggleText}>
+              {showEmailSignup ? 'Hide' : 'Sign up without Apple'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {showEmailSignup && (
           <View style={styles.emailFormContainer}>

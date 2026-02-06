@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { generateMealSuggestion } from '../services/mealPlanGeneration';
 import { generateMealImage } from '../services/imageGeneration';
+import { replaceMeal } from '../services/mealPlanStorage';
+import { getFavoriteMeals } from '../services/favoriteMeals';
+import LoadingIndicator from '../components/common/LoadingIndicator';
 
 const ReplaceMealScreen = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
@@ -25,10 +28,30 @@ const ReplaceMealScreen = ({ route, navigation }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestedMeal, setSuggestedMeal] = useState(null);
   const [previousMealName, setPreviousMealName] = useState(null);
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [favoriteMeals, setFavoriteMeals] = useState([]);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(false);
 
   const handleGoBack = () => {
     navigation.goBack();
   };
+
+  // Load favorites when switching to favourites tab
+  useEffect(() => {
+    const loadFavorites = async () => {
+      if (activeTab === 'favourites') {
+        console.log('[ReplaceMeal] Loading ALL favorites (no meal type filter)');
+        setIsLoadingFavorites(true);
+        const favorites = await getFavoriteMeals(); // Remove meal type filter to show all favorites
+        console.log('[ReplaceMeal] Favorites loaded:', favorites);
+        console.log('[ReplaceMeal] Number of favorites:', favorites.length);
+        setFavoriteMeals(favorites);
+        setIsLoadingFavorites(false);
+      }
+    };
+
+    loadFavorites();
+  }, [activeTab]);
 
   const handleSeeSuggestions = async () => {
     try {
@@ -84,17 +107,38 @@ const ReplaceMealScreen = ({ route, navigation }) => {
     handleSeeSuggestions();
   };
 
-  const handleAccept = () => {
-    // TODO: Accept the meal and replace the current one
-    console.log('[ReplaceMeal] Accepting meal:', suggestedMeal?.name);
+  const handleAccept = async () => {
+    if (!suggestedMeal) return;
+
+    try {
+      setIsAccepting(true);
+
+      console.log('[ReplaceMeal] Accepting meal:', suggestedMeal.name);
+      console.log('[ReplaceMeal] Replacing meal type:', meal.meal_type);
+      console.log('[ReplaceMeal] Date:', date);
+
+      // Replace the meal in the database
+      const success = await replaceMeal(date, meal.meal_type, suggestedMeal);
+
+      if (success) {
+        // Navigate directly to home screen - it will reload with the new meal
+        navigation.navigate('MainTabs', { screen: 'Home' });
+      } else {
+        Alert.alert('Error', 'Failed to replace meal. Please try again.');
+      }
+    } catch (error) {
+      console.error('[ReplaceMeal] Error accepting meal:', error);
+      Alert.alert('Error', 'Failed to replace meal. Please try again.');
+    } finally {
+      setIsAccepting(false);
+    }
   };
 
   const renderNewTab = () => {
     if (isGenerating) {
       return (
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={Colors.dark.primary} />
-          <Text style={styles.loadingText}>Generating meal suggestion...</Text>
+          <LoadingIndicator text="Generating meal suggestion..." subtext="Please wait" />
         </View>
       );
     }
@@ -167,11 +211,16 @@ const ReplaceMealScreen = ({ route, navigation }) => {
             <Text style={styles.showAnotherText}>Show me another</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.acceptButton}
+            style={[styles.acceptButton, isAccepting && styles.acceptButtonDisabled]}
             onPress={handleAccept}
             activeOpacity={0.8}
+            disabled={isAccepting}
           >
-            <Text style={styles.acceptText}>Accept</Text>
+            {isAccepting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.acceptText}>Accept</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -179,10 +228,88 @@ const ReplaceMealScreen = ({ route, navigation }) => {
   };
 
   const renderFavouritesTab = () => {
+    if (isLoadingFavorites) {
+      return (
+        <View style={styles.centerContent}>
+          <LoadingIndicator text="Loading favorites..." />
+        </View>
+      );
+    }
+
+    if (favoriteMeals.length === 0) {
+      return (
+        <View style={styles.centerContent}>
+          <Ionicons name="heart-outline" size={48} color={Colors.dark.textSecondary} />
+          <Text style={styles.placeholderText}>No favourite meals yet</Text>
+          <Text style={styles.placeholderSubtext}>
+            Tap the heart icon on any meal to save it here
+          </Text>
+        </View>
+      );
+    }
+
     return (
-      <View style={styles.centerContent}>
-        <Ionicons name="heart-outline" size={48} color={Colors.dark.textSecondary} />
-        <Text style={styles.placeholderText}>No favourite meals yet</Text>
+      <View style={styles.favoritesContainer}>
+        {favoriteMeals.map((favMeal, index) => (
+          <TouchableOpacity
+            key={index}
+            style={styles.favoriteMealCard}
+            onPress={() => {
+              // Convert favorite meal structure to match regular meal structure
+              const normalizedMeal = {
+                ...favMeal,
+                name: favMeal.meal_name, // Database uses meal_name, but code expects name
+              };
+              // Set this favorite as the suggested meal
+              setSuggestedMeal(normalizedMeal);
+              setActiveTab('new');
+            }}
+            activeOpacity={0.7}
+          >
+            {/* Meal Image */}
+            <View style={styles.favoriteMealImageContainer}>
+              {favMeal.image_uri ? (
+                <Image
+                  source={{ uri: favMeal.image_uri }}
+                  style={styles.favoriteMealImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.favoriteMealImage, styles.placeholderImage]}>
+                  <Ionicons name="fast-food" size={32} color={Colors.dark.textSecondary} />
+                </View>
+              )}
+            </View>
+
+            {/* Meal Info */}
+            <View style={styles.favoriteMealContent}>
+              <Text style={styles.favoriteMealName} numberOfLines={2}>
+                {favMeal.meal_name}
+              </Text>
+
+              {/* Calories */}
+              <View style={styles.favoriteCaloriesRow}>
+                <Ionicons name="flame" size={16} color={Colors.dark.primary} />
+                <Text style={styles.favoriteCaloriesText}>{favMeal.calories} kcal</Text>
+              </View>
+
+              {/* Time Info */}
+              {(favMeal.prep_time || favMeal.cook_time) && (
+                <View style={styles.favoriteTimeRow}>
+                  {favMeal.prep_time && (
+                    <Text style={styles.favoriteTimeText}>Prep: {favMeal.prep_time}</Text>
+                  )}
+                  {favMeal.cook_time && (
+                    <Text style={styles.favoriteTimeText}>Cook: {favMeal.cook_time}</Text>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* Arrow Icon */}
+            <Ionicons name="chevron-forward" size={20} color={Colors.dark.textSecondary} />
+          </TouchableOpacity>
+        ))}
       </View>
     );
   };
@@ -361,6 +488,14 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     textAlign: 'center',
   },
+  placeholderSubtext: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: Fonts.sizes.sm,
+    color: Colors.dark.textSecondary,
+    marginTop: Spacing.xs,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
   seeSuggestionsButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -454,10 +589,65 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     alignItems: 'center',
   },
+  acceptButtonDisabled: {
+    opacity: 0.6,
+  },
   acceptText: {
     fontFamily: 'Rubik_700Bold',
     fontSize: Fonts.sizes.lg,
     color: '#FFFFFF',
+  },
+  favoritesContainer: {
+    flex: 1,
+    gap: Spacing.md,
+  },
+  favoriteMealCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  favoriteMealImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+  },
+  favoriteMealImage: {
+    width: '100%',
+    height: '100%',
+  },
+  favoriteMealContent: {
+    flex: 1,
+  },
+  favoriteMealName: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textPrimary,
+    marginBottom: Spacing.xs,
+  },
+  favoriteCaloriesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  favoriteCaloriesText: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.sm,
+    color: Colors.dark.primary,
+    marginLeft: 4,
+  },
+  favoriteTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  favoriteTimeText: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: Fonts.sizes.xs,
+    color: Colors.dark.textSecondary,
   },
 });
 

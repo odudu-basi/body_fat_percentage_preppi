@@ -27,7 +27,7 @@ const DailyScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
   const { profile } = useAuth();
-  const initialTab = route.params?.initialTab || 'Nutrition';
+  const initialTab = route.params?.initialTab || 'Checklist';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [todaysMeals, setTodaysMeals] = useState([]);
   const [totalCalories, setTotalCalories] = useState(0);

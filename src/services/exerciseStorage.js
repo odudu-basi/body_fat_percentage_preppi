@@ -174,6 +174,26 @@ export const addExercise = async (exerciseData) => {
 };
 
 /**
+ * Update exercise details (duration and calories)
+ * Uses storage abstraction layer
+ */
+export const updateExercise = async (exerciseId, { duration, calories }) => {
+  try {
+    const updateData = {
+      duration,
+      calories: parseInt(calories) || 0,
+    };
+
+    const result = await storageLayerUpdateExercise(exerciseId, updateData);
+    console.log('Exercise updated:', exerciseId, 'duration:', duration, 'calories:', calories);
+    return formatExerciseFromDB(result);
+  } catch (error) {
+    console.error('Error updating exercise:', error);
+    return null;
+  }
+};
+
+/**
  * Toggle exercise completion status
  * Uses storage abstraction layer
  */

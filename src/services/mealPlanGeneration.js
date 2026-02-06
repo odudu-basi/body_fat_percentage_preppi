@@ -1,4 +1,5 @@
 import { OPENAI_API_KEY } from '@env';
+import { getRecentMealNames } from './mealPlanStorage';
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
@@ -13,11 +14,17 @@ export const generateDailyMealPlan = async (userProfile) => {
     console.log('[MealPlan] User calorie target:', userProfile?.daily_calorie_target);
     console.log('[MealPlan] User kitchen items:', userProfile?.kitchen_items);
 
+    // Get recent meal names to avoid repetition
+    const recentMealNames = await getRecentMealNames();
+    console.log('[MealPlan] Recent meals to avoid:', recentMealNames);
+
     const calorieTarget = userProfile?.daily_calorie_target || 2000;
     const proteinTarget = userProfile?.daily_protein_target || 150;
     const carbsTarget = userProfile?.daily_carbs_target || 200;
     const fatTarget = userProfile?.daily_fat_target || 65;
     const kitchenItems = userProfile?.kitchen_items || [];
+    const allergies = userProfile?.allergies || [];
+    const dietaryRestriction = userProfile?.dietary_restriction || 'none';
 
     // Ensure total calories is below target for fat loss
     const targetCalories = Math.round(calorieTarget * 0.85); // 15% deficit for fat loss
@@ -30,6 +37,24 @@ export const generateDailyMealPlan = async (userProfile) => {
     const kitchenItemsList = kitchenItems.length > 0
       ? kitchenItems.map(item => item.replace(/_/g, ' ')).join(', ')
       : 'No restrictions - use any common ingredients';
+
+    // Format allergies and dietary restrictions
+    const allergiesText = allergies.length > 0
+      ? `**ALLERGIES - NEVER USE THESE:** ${allergies.join(', ')}`
+      : '';
+
+    const dietaryText = dietaryRestriction !== 'none'
+      ? `**DIETARY RESTRICTION:** ${dietaryRestriction} - Follow ${dietaryRestriction} dietary guidelines strictly.`
+      : '';
+
+    // Format recent meals constraint
+    const recentMealsText = recentMealNames.length > 0
+      ? `**CRITICAL - DO NOT REPEAT THESE MEALS:**
+The user has already eaten these meals in the past 7 days. You MUST create completely DIFFERENT meals:
+${recentMealNames.map(name => `- ${name}`).join('\n')}
+
+DO NOT use any of these meal names or similar variations. Be creative and provide fresh, new meal ideas.`
+      : '';
 
     const prompt = `You are a professional nutritionist creating a UNIQUE daily meal plan for fat loss.
 
@@ -44,6 +69,9 @@ ${kitchenItemsList}
 
 **YOU MUST ONLY use ingredients from the above list when creating meals.**
 Do NOT suggest any ingredients that are not in this list. If the user doesn't have an ingredient, find creative alternatives using what they DO have.
+
+${allergiesText ? `\n${allergiesText}\nDo NOT include any of these allergens in ANY meal.\n` : ''}${dietaryText ? `\n${dietaryText}\n` : ''}
+${recentMealsText ? `\n${recentMealsText}\n` : ''}
 
 You are a professional nutritionist creating a daily meal plan for fat loss.
 
@@ -216,9 +244,15 @@ export const generateSingleMeal = async (mealType, userProfile) => {
     console.log('[MealPlan] Generating single meal replacement...');
     console.log('[MealPlan] Meal type:', mealType);
 
+    // Get recent meal names to avoid repetition
+    const recentMealNames = await getRecentMealNames();
+    console.log('[MealPlan] Recent meals to avoid:', recentMealNames);
+
     const calorieTarget = userProfile?.daily_calorie_target || 2000;
     const proteinTarget = userProfile?.daily_protein_target || 150;
     const kitchenItems = userProfile?.kitchen_items || [];
+    const allergies = userProfile?.allergies || [];
+    const dietaryRestriction = userProfile?.dietary_restriction || 'none';
 
     // Calculate target calories for this meal type
     let mealCalorieTarget;
@@ -248,6 +282,24 @@ export const generateSingleMeal = async (mealType, userProfile) => {
       ? kitchenItems.map(item => item.replace(/_/g, ' ')).join(', ')
       : 'No restrictions - use any common ingredients';
 
+    // Format allergies and dietary restrictions
+    const allergiesText = allergies.length > 0
+      ? `**ALLERGIES - NEVER USE THESE:** ${allergies.join(', ')}`
+      : '';
+
+    const dietaryText = dietaryRestriction !== 'none'
+      ? `**DIETARY RESTRICTION:** ${dietaryRestriction} - Follow ${dietaryRestriction} dietary guidelines strictly.`
+      : '';
+
+    // Format recent meals constraint
+    const recentMealsText = recentMealNames.length > 0
+      ? `**CRITICAL - DO NOT REPEAT THESE MEALS:**
+The user has already eaten these meals in the past 7 days. You MUST create a completely DIFFERENT meal:
+${recentMealNames.map(name => `- ${name}`).join('\n')}
+
+DO NOT use any of these meal names or similar variations. Be creative and provide a fresh, new meal idea.`
+      : '';
+
     const prompt = `You are a professional nutritionist creating a UNIQUE ${mealType} meal for fat loss.
 
 IMPORTANT: Create a completely DIFFERENT and VARIED meal. Do NOT repeat common meals. Be creative and diverse with your choices.
@@ -261,6 +313,9 @@ ${kitchenItemsList}
 
 **YOU MUST ONLY use ingredients from the above list when creating this meal.**
 Do NOT suggest any ingredients that are not in this list. If you need an ingredient that's not available, find creative alternatives using what they DO have.
+
+${allergiesText ? `\n${allergiesText}\nDo NOT include any of these allergens in this meal.\n` : ''}${dietaryText ? `\n${dietaryText}\n` : ''}
+${recentMealsText ? `\n${recentMealsText}\n` : ''}
 
 User Profile:
 - Daily calorie target: ${calorieTarget} kcal
@@ -380,11 +435,23 @@ export const generateMealSuggestion = async (mealType, userProfile, previousMeal
     console.log('[MealPlan] Meal type:', mealType);
     console.log('[MealPlan] Avoid repeating:', previousMealName);
 
+    // Get recent meal names to avoid repetition
+    const recentMealNames = await getRecentMealNames();
+    // Add the immediate previous meal if provided
+    if (previousMealName && !recentMealNames.includes(previousMealName)) {
+      recentMealNames.push(previousMealName);
+    }
+    console.log('[MealPlan] All meals to avoid:', recentMealNames);
+
     const calorieTarget = userProfile?.daily_calorie_target || 2000;
     const proteinTarget = userProfile?.daily_protein_target || 150;
     const kitchenItems = userProfile?.kitchen_items || [];
+    const allergies = userProfile?.allergies || [];
+    const dietaryRestriction = userProfile?.dietary_restriction || 'none';
 
     console.log('[MealPlan] Kitchen items available:', kitchenItems);
+    console.log('[MealPlan] Allergies:', allergies);
+    console.log('[MealPlan] Dietary restriction:', dietaryRestriction);
 
     // Calculate target calories for this meal type
     let mealCalorieTarget;
@@ -410,12 +477,28 @@ export const generateMealSuggestion = async (mealType, userProfile, previousMeal
       ? kitchenItems.map(item => item.replace(/_/g, ' ')).join(', ')
       : 'No restrictions - use any common ingredients';
 
+    // Format allergies and dietary restrictions
+    const allergiesText = allergies.length > 0
+      ? `**ALLERGIES - NEVER USE THESE:** ${allergies.join(', ')}`
+      : '';
+
+    const dietaryText = dietaryRestriction !== 'none'
+      ? `**DIETARY RESTRICTION:** ${dietaryRestriction} - Follow ${dietaryRestriction} dietary guidelines strictly.`
+      : '';
+
     // Random cuisine suggestion
     const cuisines = ['Mediterranean', 'Asian', 'Mexican', 'American', 'Indian', 'Thai', 'Italian', 'Greek', 'Middle Eastern', 'Japanese', 'Korean', 'Spanish', 'Vietnamese'];
     const randomCuisine = cuisines[Math.floor(Math.random() * cuisines.length)];
 
-    const avoidClause = previousMealName
-      ? `DO NOT suggest "${previousMealName}" or anything similar. Make something completely different.\n\n`
+    // Format recent meals constraint
+    const avoidClause = recentMealNames.length > 0
+      ? `**CRITICAL - DO NOT REPEAT THESE MEALS:**
+The user has already eaten these meals recently. You MUST create a completely DIFFERENT meal:
+${recentMealNames.map(name => `- ${name}`).join('\n')}
+
+DO NOT use any of these meal names or similar variations. Be creative and provide a fresh, new meal idea.
+
+`
       : '';
 
     const prompt = `Generate a random ${mealType} meal for fat loss.
@@ -425,6 +508,7 @@ ${avoidClause}Pick a random cuisine style. Try ${randomCuisine} or any other cui
 Available ingredients (USE VARIETY - don't default to the same ingredients):
 ${kitchenItemsList}
 
+${allergiesText ? `\n${allergiesText}\nDo NOT include any of these allergens in this meal.\n` : ''}${dietaryText ? `\n${dietaryText}\n` : ''}
 IMPORTANT:
 - ONLY use ingredients from the list above
 - Mix different ingredients together - be creative

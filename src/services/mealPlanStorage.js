@@ -161,6 +161,66 @@ const getMealPlans = async () => {
 };
 
 /**
+ * Get recent meal names (last 7 days) to avoid repetition
+ * @returns {Promise<Array<string>>} - Array of recent meal names
+ */
+export const getRecentMealNames = async () => {
+  try {
+    let userId = null;
+
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      userId = user.id;
+    } else {
+      userId = 'dev-user';
+    }
+
+    // Calculate date 7 days ago
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = getLocalDateString(sevenDaysAgo);
+
+    let recentPlans = [];
+
+    if (USE_LOCAL_STORAGE) {
+      const allPlans = await getMealPlans();
+      recentPlans = allPlans.filter(
+        p => p.user_id === userId && p.date >= sevenDaysAgoStr
+      );
+    } else {
+      const { data, error } = await supabase
+        .from('meal_plans')
+        .select('meals')
+        .eq('user_id', userId)
+        .gte('date', sevenDaysAgoStr)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      recentPlans = data || [];
+    }
+
+    // Extract all meal names from recent plans
+    const mealNames = [];
+    recentPlans.forEach(plan => {
+      if (plan.meals && Array.isArray(plan.meals)) {
+        plan.meals.forEach(meal => {
+          if (meal.name && !mealNames.includes(meal.name)) {
+            mealNames.push(meal.name);
+          }
+        });
+      }
+    });
+
+    console.log('[MealPlanStorage] Found', mealNames.length, 'unique meals from last 7 days:', mealNames);
+    return mealNames;
+  } catch (error) {
+    console.error('[MealPlanStorage] Error getting recent meal names:', error);
+    return [];
+  }
+};
+
+/**
  * Update completion status for a meal in the plan
  * @param {string} date - Date string
  * @param {string} mealType - Type of meal (breakfast, lunch, dinner, snack)
@@ -298,10 +358,155 @@ export const updateMealRecipe = async (date, mealType, recipeData) => {
   }
 };
 
+/**
+ * Update image for a specific meal in the plan
+ * @param {string} date - Date string
+ * @param {string} mealType - Type of meal (breakfast, lunch, dinner, snack)
+ * @param {string} imageUri - Image URI to save
+ * @returns {Promise<boolean>} - Success status
+ */
+export const updateMealImage = async (date, mealType, imageUri) => {
+  try {
+    const plan = await getMealPlanForDate(date);
+    if (!plan) return false;
+
+    const updatedMeals = plan.meals.map(meal =>
+      meal.meal_type === mealType ? { ...meal, image_uri: imageUri } : meal
+    );
+
+    let userId = null;
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      userId = user.id;
+    } else {
+      userId = 'dev-user';
+    }
+
+    if (USE_LOCAL_STORAGE) {
+      const plans = await getMealPlans();
+      const planIndex = plans.findIndex(p => p.date === date && p.user_id === userId);
+      if (planIndex !== -1) {
+        plans[planIndex].meals = updatedMeals;
+        await AsyncStorage.setItem(MEAL_PLAN_KEY, JSON.stringify(plans));
+      }
+    } else {
+      const { error } = await supabase
+        .from('meal_plans')
+        .update({ meals: updatedMeals })
+        .eq('id', plan.id);
+
+      if (error) throw error;
+    }
+
+    console.log('[MealPlanStorage] Image updated for meal:', mealType);
+    return true;
+  } catch (error) {
+    console.error('[MealPlanStorage] Error updating image:', error);
+    return false;
+  }
+};
+
+/**
+ * Replace a specific meal in the plan with a new meal
+ * @param {string} date - Date string
+ * @param {string} mealType - Type of meal to replace (breakfast, lunch, dinner, snack)
+ * @param {Object} newMeal - New meal data
+ * @returns {Promise<boolean>} - Success status
+ */
+export const replaceMeal = async (date, mealType, newMeal) => {
+  try {
+    const plan = await getMealPlanForDate(date);
+    if (!plan) {
+      console.error('[MealPlanStorage] No plan found for date:', date);
+      return false;
+    }
+
+    let userId = null;
+    if (!USE_LOCAL_STORAGE) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      userId = user.id;
+    } else {
+      userId = 'dev-user';
+    }
+
+    // Find the old meal to check if it was completed (has meal_log_id)
+    const oldMeal = plan.meals.find(m => m.meal_type === mealType);
+
+    // If the old meal was checked (has meal_log_id), delete it from meal_logs
+    if (oldMeal?.meal_log_id && !USE_LOCAL_STORAGE) {
+      console.log('[MealPlanStorage] Deleting old meal from meal_logs:', oldMeal.meal_log_id);
+      const { error: deleteError } = await supabase
+        .from('meal_logs')
+        .delete()
+        .eq('id', oldMeal.meal_log_id);
+
+      if (deleteError) {
+        console.error('[MealPlanStorage] Error deleting old meal log:', deleteError);
+        // Continue anyway - the meal plan will still be updated
+      } else {
+        console.log('[MealPlanStorage] Old meal log deleted successfully');
+      }
+    }
+
+    // Find and replace the meal (reset completed and meal_log_id)
+    const updatedMeals = plan.meals.map(meal =>
+      meal.meal_type === mealType
+        ? {
+            ...newMeal,
+            meal_type: mealType,
+            completed: false, // Reset completion status
+            meal_log_id: null, // Clear meal_log_id
+          }
+        : meal
+    );
+
+    // Recalculate totals
+    const total_calories = updatedMeals.reduce((sum, m) => sum + (m.calories || 0), 0);
+    const total_protein = updatedMeals.reduce((sum, m) => sum + (m.protein_g || 0), 0);
+    const total_carbs = updatedMeals.reduce((sum, m) => sum + (m.carbs_g || 0), 0);
+    const total_fat = updatedMeals.reduce((sum, m) => sum + (m.fat_g || 0), 0);
+
+    if (USE_LOCAL_STORAGE) {
+      const plans = await getMealPlans();
+      const planIndex = plans.findIndex(p => p.date === date && p.user_id === userId);
+      if (planIndex !== -1) {
+        plans[planIndex].meals = updatedMeals;
+        plans[planIndex].total_calories = total_calories;
+        plans[planIndex].total_protein = total_protein;
+        plans[planIndex].total_carbs = total_carbs;
+        plans[planIndex].total_fat = total_fat;
+        await AsyncStorage.setItem(MEAL_PLAN_KEY, JSON.stringify(plans));
+      }
+    } else {
+      const { error } = await supabase
+        .from('meal_plans')
+        .update({
+          meals: updatedMeals,
+          total_calories,
+          total_protein,
+          total_carbs,
+          total_fat,
+        })
+        .eq('id', plan.id);
+
+      if (error) throw error;
+    }
+
+    console.log('[MealPlanStorage] Meal replaced successfully:', mealType);
+    return true;
+  } catch (error) {
+    console.error('[MealPlanStorage] Error replacing meal:', error);
+    return false;
+  }
+};
+
 export default {
   saveDailyMealPlan,
   getMealPlanForDate,
   updateMealCompletion,
   deleteMealPlan,
   updateMealRecipe,
+  replaceMeal,
 };

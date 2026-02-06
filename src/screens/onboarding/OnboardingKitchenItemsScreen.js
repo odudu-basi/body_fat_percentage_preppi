@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,9 @@ import {
   Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
-import { useAuth } from '../context/AuthContext';
+import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
 // Kitchen Items organized by category
 const KITCHEN_ITEMS = {
@@ -116,26 +116,19 @@ const KITCHEN_ITEMS = {
   },
 };
 
-const KitchenItemsScreen = ({ navigation }) => {
+const OnboardingKitchenItemsScreen = () => {
   const insets = useSafeAreaInsets();
-  const { profile, updateProfile } = useAuth();
+  const navigation = useNavigation();
+  const route = useRoute();
   const [selectedItems, setSelectedItems] = useState({});
   const [customItems, setCustomItems] = useState({});
-  const [isSaving, setIsSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addingToCategory, setAddingToCategory] = useState(null);
   const [newItemName, setNewItemName] = useState('');
 
-  // Load existing kitchen items when screen mounts
-  useEffect(() => {
-    if (profile?.kitchen_items && Array.isArray(profile.kitchen_items)) {
-      const initialSelections = {};
-      profile.kitchen_items.forEach(itemId => {
-        initialSelections[itemId] = true;
-      });
-      setSelectedItems(initialSelections);
-    }
-  }, [profile]);
+  const handleBack = () => {
+    navigation.goBack();
+  };
 
   const toggleItem = (itemId) => {
     setSelectedItems(prev => ({
@@ -195,43 +188,42 @@ const KitchenItemsScreen = ({ navigation }) => {
     setAddingToCategory(null);
   };
 
-  const handleSave = async () => {
-    try {
-      setIsSaving(true);
+  const handleNext = () => {
+    // Convert selectedItems object to array of selected item IDs
+    const selectedItemsArray = Object.keys(selectedItems).filter(
+      itemId => selectedItems[itemId]
+    );
 
-      // Convert selectedItems object to array of selected item IDs
-      const selectedItemsArray = Object.keys(selectedItems).filter(
-        itemId => selectedItems[itemId]
-      );
+    console.log('[OnboardingKitchen] Selected items:', selectedItemsArray);
 
-      console.log('[KitchenItems] Saving items:', selectedItemsArray);
-
-      // Save to profile
-      await updateProfile({
-        kitchen_items: selectedItemsArray,
-      });
-
-      console.log('[KitchenItems] Kitchen items saved successfully');
-      navigation.goBack();
-    } catch (error) {
-      console.error('[KitchenItems] Error saving kitchen items:', error);
-      Alert.alert('Error', 'Failed to save kitchen items. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
+    navigation.navigate('Allergies', {
+      ...route.params,
+      kitchen_items: selectedItemsArray,
+    });
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={handleBack}
           activeOpacity={0.7}
         >
-          <Ionicons name="chevron-back" size={28} color={Colors.dark.textPrimary} />
+          <Ionicons name="arrow-back" size={24} color={Colors.dark.textPrimary} />
         </TouchableOpacity>
+
+        <View style={styles.progressBarContainer}>
+          <View style={styles.progressBarBackground}>
+            <View style={[styles.progressBarFill, { width: '75%' }]} />
+          </View>
+        </View>
+
+        <View style={styles.languageSelector}>
+          <Text style={styles.languageFlag}>🇺🇸</Text>
+          <Text style={styles.languageCode}>EN</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -244,8 +236,8 @@ const KitchenItemsScreen = ({ navigation }) => {
           <View style={styles.iconCircle}>
             <Text style={styles.iconEmoji}>🍎</Text>
           </View>
-          <Text style={styles.title}>Select your available foods</Text>
-          <Text style={styles.subtitle}>Your meal plan depends on it</Text>
+          <Text style={styles.title}>What do you cook with?</Text>
+          <Text style={styles.subtitle}>Select ingredients you regularly have in your kitchen</Text>
         </View>
 
         {/* Categories */}
@@ -366,17 +358,14 @@ const KitchenItemsScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* Bottom Save Button */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md }]}>
+      {/* Next Button */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         <TouchableOpacity
-          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-          onPress={handleSave}
+          style={styles.nextButton}
+          onPress={handleNext}
           activeOpacity={0.8}
-          disabled={isSaving}
         >
-          <Text style={styles.saveButtonText}>
-            {isSaving ? 'Saving...' : 'Save'}
-          </Text>
+          <Text style={styles.nextButtonText}>Next</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -389,14 +378,46 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.background,
   },
   header: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
+    gap: Spacing.md,
   },
   backButton: {
     width: 44,
     height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.dark.surface,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  progressBarContainer: {
+    flex: 1,
+  },
+  progressBarBackground: {
+    height: 4,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 2,
+  },
+  languageSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  languageFlag: {
+    fontSize: 20,
+  },
+  languageCode: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textPrimary,
   },
   scrollContent: {
     flex: 1,
@@ -423,7 +444,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: 'Rubik_700Bold',
-    fontSize: 24,
+    fontSize: Fonts.sizes.xxxl,
     color: Colors.dark.textPrimary,
     textAlign: 'center',
     marginBottom: Spacing.xs,
@@ -508,7 +529,7 @@ const styles = StyleSheet.create({
     fontSize: Fonts.sizes.sm,
     color: Colors.dark.textPrimary,
   },
-  bottomBar: {
+  footer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -519,16 +540,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.dark.surface,
   },
-  saveButton: {
+  nextButton: {
+    width: '100%',
     backgroundColor: Colors.dark.primary,
     paddingVertical: Spacing.md + 4,
     borderRadius: BorderRadius.full,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
+  nextButtonText: {
     fontFamily: 'Rubik_700Bold',
     fontSize: Fonts.sizes.lg,
     color: '#FFFFFF',
@@ -605,4 +625,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default KitchenItemsScreen;
+export default OnboardingKitchenItemsScreen;

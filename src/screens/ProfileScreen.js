@@ -640,12 +640,13 @@ const ProfileScreen = ({ navigation }) => {
           />
           <ProfileCard
             icon="alert-circle-outline"
-            label="Allergies"
-            value="Not set"
-            onPress={() => {
-              // TODO: Open allergies selection modal
-              console.log('Allergies preferences');
-            }}
+            label="Allergies & Dietary"
+            value={
+              profile?.allergies?.length > 0 || profile?.dietary_restriction !== 'none'
+                ? `${profile?.allergies?.length || 0} allergies${profile?.dietary_restriction !== 'none' ? `, ${profile.dietary_restriction}` : ''}`
+                : 'Not set'
+            }
+            onPress={() => navigation.navigate('Allergies')}
           />
           <ProfileCard
             icon="restaurant-outline"
@@ -722,7 +723,7 @@ const ProfileScreen = ({ navigation }) => {
         </View>
 
         {/* App Version */}
-        <Text style={styles.versionText}>Version 1.3.0 (23)</Text>
+        <Text style={styles.versionText}>Version 2.8.0 (17)</Text>
       </ScrollView>
 
       {/* Edit Modal */}

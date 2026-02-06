@@ -67,11 +67,14 @@ const BodyScanCard = ({
     body_fat_percentage,
     front_image_path,
     scan_date,
+    weight_lbs,
+    weight_kg,
   } = scanData;
 
   const dayName = getDayName(scan_date);
   const formattedDate = getFormattedDate(scan_date);
   const percentage = body_fat_percentage ? Math.round(body_fat_percentage * 10) / 10 : '--';
+  const weightDisplay = weight_lbs ? `${Math.round(weight_lbs)} lbs` : (weight_kg ? `${Math.round(weight_kg)} kg` : '--');
 
   const handleDelete = () => {
     Alert.alert(
@@ -148,16 +151,22 @@ const BodyScanCard = ({
         onPress={onPress}
         activeOpacity={0.8}
       >
-        {/* Left side - Torso image thumbnail */}
+        {/* Left side - Torso image thumbnail with weight overlay */}
         <View style={styles.imageContainer}>
           {front_image_path ? (
-            <Image
-              source={{ uri: front_image_path }}
-              style={styles.torsoImage}
-              resizeMode="cover"
-              onError={(error) => console.error('[BodyScanCard] Image load error:', error.nativeEvent.error, 'URI:', front_image_path)}
-              onLoad={() => console.log('[BodyScanCard] Image loaded successfully:', front_image_path)}
-            />
+            <>
+              <Image
+                source={{ uri: front_image_path }}
+                style={styles.torsoImage}
+                resizeMode="cover"
+                onError={(error) => console.error('[BodyScanCard] Image load error:', error.nativeEvent.error, 'URI:', front_image_path)}
+                onLoad={() => console.log('[BodyScanCard] Image loaded successfully:', front_image_path)}
+              />
+              {/* Weight overlay at bottom right */}
+              <View style={styles.weightOverlay}>
+                <Text style={styles.weightText}>{weightDisplay}</Text>
+              </View>
+            </>
           ) : (
             <View style={styles.placeholderImage}>
               <View style={styles.torsoIcon}>
@@ -174,17 +183,16 @@ const BodyScanCard = ({
           <Text style={styles.fullDate}>{formattedDate}</Text>
         </View>
 
-        {/* Right side - Body fat percentage */}
-        <View style={styles.percentageContainer}>
-          <Text style={styles.percentageValue}>{percentage}</Text>
-          <Text style={styles.percentageSymbol}>%</Text>
+        {/* Right side - Chevron icon */}
+        <View style={styles.chevronContainer}>
+          <Ionicons name="chevron-forward" size={20} color={Colors.dark.textSecondary} />
         </View>
       </TouchableOpacity>
     </Swipeable>
   );
 };
 
-const IMAGE_SIZE = 60;
+const IMAGE_SIZE = 80;
 
 const styles = StyleSheet.create({
   container: {
@@ -203,10 +211,25 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     overflow: 'hidden',
     backgroundColor: 'rgba(232, 93, 4, 0.1)',
+    position: 'relative',
   },
   torsoImage: {
     width: '100%',
     height: '100%',
+  },
+  weightOverlay: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  weightText: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: 11,
+    color: Colors.dark.primary,
   },
   placeholderImage: {
     width: '100%',
@@ -248,20 +271,10 @@ const styles = StyleSheet.create({
     fontSize: Fonts.sizes.sm,
     color: Colors.dark.textSecondary,
   },
-  percentageContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  percentageValue: {
-    fontFamily: 'Rubik_700Bold',
-    fontSize: 32,
-    color: Colors.dark.primary,
-  },
-  percentageSymbol: {
-    fontFamily: 'Rubik_600SemiBold',
-    fontSize: Fonts.sizes.lg,
-    color: Colors.dark.primary,
-    marginLeft: 2,
+  chevronContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingLeft: Spacing.sm,
   },
   // Delete action styles
   deleteAction: {

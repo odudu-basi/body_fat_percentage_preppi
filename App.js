@@ -24,6 +24,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { Colors } from './src/constants/theme';
 import { AuthProvider } from './src/context/AuthContext';
 import { SubscriptionProvider } from './src/context/SubscriptionContext';
+import { initializeTikTokSDK, trackTikTokLaunchApp } from './src/services/tiktokTracking';
 
 // Check if we're in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -65,9 +66,18 @@ export default function App() {
   const routeNameRef = React.useRef();
   const navigationRef = React.useRef();
 
-  // CRITICAL: Configure RevenueCat on mount (before rendering providers)
+  // CRITICAL: Configure RevenueCat and TikTok SDK on mount (before rendering providers)
   // Only in production builds, not in Expo Go
   useEffect(() => {
+    // Initialize TikTok SDK and track LaunchApp (async, non-blocking)
+    (async () => {
+      const initialized = await initializeTikTokSDK();
+      if (initialized) {
+        // Track launch app after SDK is ready
+        await trackTikTokLaunchApp();
+      }
+    })();
+
     if (isExpoGo) {
       console.log('[App] 🔧 DEV MODE: Skipping RevenueCat configuration (Expo Go)');
       return;

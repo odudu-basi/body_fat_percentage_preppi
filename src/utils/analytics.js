@@ -16,7 +16,7 @@ try {
 } catch (e) {
   console.log('[Analytics] @env not available, using fallback');
   // Fallback token for production builds
-  MIXPANEL_TOKEN = '960505c4a91475bb48810345ab802c0e';
+  MIXPANEL_TOKEN = '2092ea973e49cfaa46272b8a96d62f72';
 }
 
 // Check if we're in Expo Go (development mode)
@@ -62,7 +62,7 @@ export const initAnalytics = async () => {
     }
 
     // Fallback to hardcoded token if env import fails
-    const token = MIXPANEL_TOKEN || '960505c4a91475bb48810345ab802c0e';
+    const token = MIXPANEL_TOKEN || '2092ea973e49cfaa46272b8a96d62f72';
 
     console.log('[Analytics] Initializing Mixpanel...');
 

@@ -29,6 +29,20 @@ try {
   trackOnboardingComplete = () => {};
 }
 
+// Safely import TikTok tracking
+let trackTikTokRegistration, trackTikTokLogin, trackTikTokCompleteTutorial;
+try {
+  const tiktok = require('../services/tiktokTracking');
+  trackTikTokRegistration = tiktok.trackTikTokRegistration || (() => {});
+  trackTikTokLogin = tiktok.trackTikTokLogin || (() => {});
+  trackTikTokCompleteTutorial = tiktok.trackTikTokCompleteTutorial || (() => {});
+} catch (e) {
+  console.log('[AuthContext] TikTok tracking not available');
+  trackTikTokRegistration = () => {};
+  trackTikTokLogin = () => {};
+  trackTikTokCompleteTutorial = () => {};
+}
+
 const AuthContext = createContext(undefined);
 
 // Check if we're running in Expo Go (development mode)
@@ -238,6 +252,9 @@ export const AuthProvider = ({ children }) => {
         ethnicity: onboardingData.ethnicity,
         workout_frequency: onboardingData.workoutFrequency,
         water_intake_liters: onboardingData.waterIntake,
+        kitchen_items: onboardingData.kitchen_items || [],
+        allergies: onboardingData.allergies || [],
+        dietary_restriction: onboardingData.dietary_restriction || 'none',
         difficulty: onboardingData.difficulty || 'medium',
         activity_level: onboardingData.workoutFrequency === '6+' ? 'very_active'
           : onboardingData.workoutFrequency === '3-5' ? 'moderately_active'
@@ -280,6 +297,10 @@ export const AuthProvider = ({ children }) => {
       // Track onboarding completion
       trackOnboardingComplete(0);
 
+      // TikTok: dev mode counts as registration + tutorial complete
+      trackTikTokRegistration(devUser.email);
+      trackTikTokCompleteTutorial();
+
       return { data: { user: devUser, session: { user: devUser } }, error: null };
     } catch (error) {
       console.error('Dev mode sign in error:', error);
@@ -318,9 +339,14 @@ export const AuthProvider = ({ children }) => {
             birthday: onboardingData.birthday,
             height_cm: onboardingData.height_cm,
             weight_kg: onboardingData.weight_kg,
+            target_weight_kg: onboardingData.target_weight_kg,
+            target_body_fat_percentage: onboardingData.target_body_fat_percentage,
             ethnicity: onboardingData.ethnicity,
             workout_frequency: onboardingData.workoutFrequency,
             water_intake_liters: onboardingData.waterIntake,
+            kitchen_items: onboardingData.kitchen_items || [],
+            allergies: onboardingData.allergies || [],
+            dietary_restriction: onboardingData.dietary_restriction || 'none',
             difficulty: onboardingData.difficulty || 'medium',
             activity_level: onboardingData.workoutFrequency === '6+' ? 'very_active'
               : onboardingData.workoutFrequency === '3-5' ? 'moderately_active'
@@ -370,6 +396,10 @@ export const AuthProvider = ({ children }) => {
           // Track onboarding completion for new users
           // Calculate time (this is a rough estimate since we don't track start time)
           trackOnboardingComplete(0); // We don't have exact time, so pass 0
+
+          // TikTok: new user registered + tutorial done
+          trackTikTokRegistration(email);
+          trackTikTokCompleteTutorial();
         }
       }
 
@@ -447,6 +477,9 @@ export const AuthProvider = ({ children }) => {
           }
 
           setProfile(userProfile);
+
+          // TikTok: returning user logged in
+          trackTikTokLogin(email);
         } catch (profileError) {
           console.error('❌ Error fetching/updating profile:', profileError);
         }
@@ -492,9 +525,14 @@ export const AuthProvider = ({ children }) => {
               birthday: onboardingData.birthday,
               height_cm: onboardingData.height_cm,
               weight_kg: onboardingData.weight_kg,
+              target_weight_kg: onboardingData.target_weight_kg,
+              target_body_fat_percentage: onboardingData.target_body_fat_percentage,
               ethnicity: onboardingData.ethnicity,
               workout_frequency: onboardingData.workoutFrequency,
               water_intake_liters: onboardingData.waterIntake,
+              kitchen_items: onboardingData.kitchen_items || [],
+              allergies: onboardingData.allergies || [],
+              dietary_restriction: onboardingData.dietary_restriction || 'none',
               difficulty: onboardingData.difficulty || 'medium',
               activity_level: onboardingData.workoutFrequency === '6+' ? 'very_active'
                 : onboardingData.workoutFrequency === '3-5' ? 'moderately_active'
@@ -529,6 +567,13 @@ export const AuthProvider = ({ children }) => {
 
             // Track onboarding completion for new users with onboarding data
             trackOnboardingComplete(0);
+
+            // TikTok: new user registered + tutorial done
+            trackTikTokRegistration(data.user.email || null);
+            trackTikTokCompleteTutorial();
+          } else {
+            // TikTok: returning user logged back in
+            trackTikTokLogin(data.user.email || null);
           }
 
           setProfile(userProfile);

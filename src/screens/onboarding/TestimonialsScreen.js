@@ -28,7 +28,7 @@ const TestimonialsScreen = () => {
       await StoreReview.requestReview();
     }
 
-    navigation.navigate('Accuracy', {
+    navigation.navigate('Paywall', {
       ...route.params,
     });
   };

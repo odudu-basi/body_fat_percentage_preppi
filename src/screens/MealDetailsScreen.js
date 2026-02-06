@@ -7,15 +7,17 @@ import {
   Image,
   ScrollView,
   Dimensions,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import { generateMealRecipe } from '../services/recipeGeneration';
-import { updateMealRecipe } from '../services/mealPlanStorage';
+import { updateMealRecipe, updateMealImage } from '../services/mealPlanStorage';
 import { getLocalDateString } from '../utils/dateUtils';
+import { toggleFavoriteMeal, isMealFavorited } from '../services/favoriteMeals';
+import { generateMealImage } from '../services/imageGeneration';
+import LoadingIndicator from '../components/common/LoadingIndicator';
 
 const { width } = Dimensions.get('window');
 
@@ -40,6 +42,10 @@ const MealDetailsScreen = ({ route, navigation }) => {
   const [recipe, setRecipe] = useState(meal?.recipe || null);
   const [error, setError] = useState(null);
   const [macroPage, setMacroPage] = useState(0);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+  const [mealImage, setMealImage] = useState(meal?.image_uri || null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
   useEffect(() => {
     const loadRecipe = async () => {
@@ -77,6 +83,18 @@ const MealDetailsScreen = ({ route, navigation }) => {
     loadRecipe();
   }, [meal, date]);
 
+  // Check if meal is favorited on mount
+  useEffect(() => {
+    const checkFavoriteStatus = async () => {
+      if (meal?.name) {
+        const favorited = await isMealFavorited(meal.name);
+        setIsFavorited(favorited);
+      }
+    };
+
+    checkFavoriteStatus();
+  }, [meal?.name]);
+
   const handleGoBack = () => {
     navigation.goBack();
   };
@@ -85,12 +103,86 @@ const MealDetailsScreen = ({ route, navigation }) => {
     navigation.navigate('ReplaceMeal', { meal, date });
   };
 
+  const handleToggleFavorite = async () => {
+    if (isTogglingFavorite) return;
+
+    try {
+      setIsTogglingFavorite(true);
+
+      // Combine meal data with recipe for complete favorite
+      const mealWithRecipe = {
+        ...meal,
+        recipe: recipe,
+      };
+
+      const result = await toggleFavoriteMeal(mealWithRecipe);
+
+      if (result.success) {
+        setIsFavorited(result.isFavorited);
+        Alert.alert(
+          result.isFavorited ? 'Added to Favorites' : 'Removed from Favorites',
+          result.isFavorited
+            ? `${meal.name} has been added to your favorites`
+            : `${meal.name} has been removed from your favorites`
+        );
+      } else {
+        Alert.alert('Error', result.error || 'Failed to update favorites');
+      }
+    } catch (error) {
+      console.error('[MealDetails] Error toggling favorite:', error);
+      Alert.alert('Error', 'Failed to update favorites');
+    } finally {
+      setIsTogglingFavorite(false);
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    if (isGeneratingImage) return;
+
+    try {
+      setIsGeneratingImage(true);
+
+      console.log('[MealDetails] Generating image for:', meal.name);
+
+      // Generate image for this meal
+      const imageUri = await generateMealImage(meal);
+
+      if (imageUri) {
+        console.log('[MealDetails] Image generated:', imageUri);
+
+        // Update meal image in database
+        if (date) {
+          await updateMealImage(date, meal.meal_type, imageUri);
+        }
+
+        // Update local state
+        setMealImage(imageUri);
+
+        Alert.alert(
+          'Image Generated',
+          'Meal image has been generated successfully!',
+          [{ text: 'OK' }]
+        );
+      } else {
+        throw new Error('Failed to generate image');
+      }
+    } catch (error) {
+      console.error('[MealDetails] Error generating image:', error);
+      Alert.alert(
+        'Error',
+        'Failed to generate image. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
   // Loading State
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centerContent, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={Colors.dark.primary} />
-        <Text style={styles.loadingText}>Generating recipe...</Text>
+        <LoadingIndicator text="Generating recipe..." subtext="This may take a few seconds" />
       </View>
     );
   }
@@ -129,17 +221,45 @@ const MealDetailsScreen = ({ route, navigation }) => {
       >
         {/* Food Image */}
         <View style={styles.imageContainer}>
-          {meal.image_uri ? (
+          {mealImage ? (
             <Image
-              source={{ uri: meal.image_uri }}
+              source={{ uri: mealImage }}
               style={styles.foodImage}
               resizeMode="cover"
             />
+          ) : isGeneratingImage ? (
+            <View style={[styles.foodImage, styles.placeholderImage]}>
+              <LoadingIndicator
+                text="Generating image..."
+                subtext="Please wait"
+                size={60}
+              />
+            </View>
           ) : (
             <View style={[styles.foodImage, styles.placeholderImage]}>
-              <Ionicons name="fast-food" size={64} color={Colors.dark.textSecondary} />
+              <TouchableOpacity
+                style={styles.generateImageButton}
+                onPress={handleGenerateImage}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="image-outline" size={32} color={Colors.dark.primary} />
+                <Text style={styles.generateImageText}>Generate Image</Text>
+              </TouchableOpacity>
             </View>
           )}
+          {/* Favorite button - top right */}
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={handleToggleFavorite}
+            activeOpacity={0.7}
+            disabled={isTogglingFavorite}
+          >
+            <Ionicons
+              name={isFavorited ? 'heart' : 'heart-outline'}
+              size={24}
+              color={Colors.dark.primary}
+            />
+          </TouchableOpacity>
           {/* Calories badge on image - bottom right */}
           <View style={styles.caloriesBadge}>
             <Text style={styles.caloriesBadgeText}>{meal.calories} kcal</Text>
@@ -407,6 +527,29 @@ const styles = StyleSheet.create({
   },
   placeholderImage: {
     backgroundColor: Colors.dark.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  generateImageButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+  },
+  generateImageText: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.primary,
+    marginTop: Spacing.sm,
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
   },
