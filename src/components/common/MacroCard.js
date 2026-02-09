@@ -5,21 +5,69 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
-const MacroItem = ({ value, unit, label, icon, iconColor, onPress }) => (
-  <TouchableOpacity style={styles.macroItem} onPress={onPress} activeOpacity={0.8}>
-    <Text style={styles.macroValue}>{value}<Text style={styles.macroUnit}>{unit}</Text></Text>
-    <Text style={styles.macroLabel}>{label}</Text>
-    <View style={styles.macroRingContainer}>
-      <View style={styles.macroRingTrack} />
-      <View style={styles.macroRingCenter}>
-        <Ionicons name={icon} size={24} color={iconColor} />
+const RING_SIZE = 70;
+const STROKE_WIDTH = 5;
+
+const MacroItem = ({ value, unit, label, icon, iconColor, onPress, consumed, target }) => {
+  // Calculate progress for ring (0-200%)
+  const progressPercentage = Math.min((consumed / target) * 100, 200);
+
+  // Determine ring color and progress value
+  let ringColor = iconColor; // Use the macro's original color for 0-100%
+  let displayProgress = progressPercentage;
+
+  if (progressPercentage > 100) {
+    ringColor = '#FF3B30'; // Red for over 100%
+    displayProgress = progressPercentage - 100; // Show 0-100% in red zone
+  }
+
+  // SVG Circle calculations
+  const radius = (RING_SIZE - STROKE_WIDTH) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDashoffset = circumference - (displayProgress / 100) * circumference;
+
+  return (
+    <TouchableOpacity style={styles.macroItem} onPress={onPress} activeOpacity={0.8}>
+      <Text style={styles.macroValue}>{value}<Text style={styles.macroUnit}>{unit}</Text></Text>
+      <Text style={styles.macroLabel}>{label}</Text>
+      <View style={styles.macroRingContainer}>
+        {/* SVG Progress Ring */}
+        <Svg width={RING_SIZE} height={RING_SIZE} style={styles.svgRing}>
+          {/* Background track (gray) */}
+          <Circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={radius}
+            stroke="rgba(160, 160, 160, 0.3)"
+            strokeWidth={STROKE_WIDTH}
+            fill="none"
+          />
+          {/* Progress ring (colored or red) */}
+          <Circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={radius}
+            stroke={ringColor}
+            strokeWidth={STROKE_WIDTH}
+            fill="none"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            rotation="-90"
+            origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
+          />
+        </Svg>
+        <View style={styles.macroRingCenter}>
+          <Ionicons name={icon} size={24} color={iconColor} />
+        </View>
       </View>
-    </View>
-  </TouchableOpacity>
-);
+    </TouchableOpacity>
+  );
+};
 
 const MacroCard = ({
   // First macro (consumed and target)
@@ -77,6 +125,8 @@ const MacroCard = ({
         icon={icons.first}
         iconColor={colors.first}
         onPress={onPress}
+        consumed={firstConsumed}
+        target={firstTarget}
       />
       <MacroItem
         value={Math.round(secondValue)}
@@ -85,6 +135,8 @@ const MacroCard = ({
         icon={icons.second}
         iconColor={colors.second}
         onPress={onPress}
+        consumed={secondConsumed}
+        target={secondTarget}
       />
       <MacroItem
         value={Math.round(thirdValue)}
@@ -93,12 +145,12 @@ const MacroCard = ({
         icon={icons.third}
         iconColor={colors.third}
         onPress={onPress}
+        consumed={thirdConsumed}
+        target={thirdTarget}
       />
     </View>
   );
 };
-
-const RING_SIZE = 70;
 
 const styles = StyleSheet.create({
   container: {
@@ -138,13 +190,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: 'auto',
   },
-  macroRingTrack: {
+  svgRing: {
     position: 'absolute',
-    width: RING_SIZE,
-    height: RING_SIZE,
-    borderRadius: RING_SIZE / 2,
-    borderWidth: 5,
-    borderColor: 'rgba(160, 160, 160, 0.3)',
   },
   macroRingCenter: {
     width: RING_SIZE - 20,

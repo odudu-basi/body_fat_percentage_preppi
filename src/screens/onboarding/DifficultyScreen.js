@@ -68,7 +68,7 @@ const DifficultyScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '96%' }]} />
+            <View style={[styles.progressBarFill, { width: '94%' }]} />
           </View>
         </View>
 

@@ -10,7 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
-const AddCaloriesBox = ({ onPhoto }) => {
+const AddCaloriesBox = ({ onPhoto, onMealPlan }) => {
   const [modalVisible, setModalVisible] = useState(false);
 
   const handlePress = () => {
@@ -25,6 +25,16 @@ const AddCaloriesBox = ({ onPhoto }) => {
     setTimeout(() => {
       console.log('[AddCaloriesBox] Calling onPhoto callback');
       onPhoto?.();
+    }, 300);
+  };
+
+  const handleMealPlan = () => {
+    console.log('[AddCaloriesBox] Meal Plan pressed, closing modal');
+    setModalVisible(false);
+    // Add small delay to ensure modal is fully closed before callback
+    setTimeout(() => {
+      console.log('[AddCaloriesBox] Calling onMealPlan callback');
+      onMealPlan?.();
     }, 300);
   };
 
@@ -69,6 +79,22 @@ const AddCaloriesBox = ({ onPhoto }) => {
               <View style={styles.optionTextContainer}>
                 <Text style={styles.optionTitle}>Photo</Text>
                 <Text style={styles.optionSubtitle}>Scan your meal</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color={Colors.dark.textSecondary} />
+            </TouchableOpacity>
+
+            {/* Meal Plan Option */}
+            <TouchableOpacity
+              style={styles.optionButton}
+              onPress={handleMealPlan}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.optionIcon, { backgroundColor: 'rgba(100, 181, 246, 0.15)' }]}>
+                <Ionicons name="restaurant-outline" size={28} color="#64B5F6" />
+              </View>
+              <View style={styles.optionTextContainer}>
+                <Text style={styles.optionTitle}>Meal Plan</Text>
+                <Text style={styles.optionSubtitle}>View today's plan</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color={Colors.dark.textSecondary} />
             </TouchableOpacity>

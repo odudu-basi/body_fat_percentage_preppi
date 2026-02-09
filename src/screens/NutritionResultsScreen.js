@@ -23,7 +23,7 @@ import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import { analyzeFoodPhoto } from '../services/foodAnalysis';
 import { saveMeal, updateMeal, formatMealForStorage } from '../services/mealStorage';
 import { trackMealLog } from '../utils/analytics';
-import { CLAUDE_API_KEY } from '@env';
+import { CLAUDE_API_KEY, OPENAI_API_KEY } from '@env';
 
 const { width } = Dimensions.get('window');
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -127,22 +127,18 @@ const NutritionResultsScreen = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
   const { photoUri, existingMeal } = route.params || {};
   
-  // For existing meals, use original_analysis if available, otherwise construct from meal data
+  // For existing meals, construct from current meal data (not original_analysis)
+  // This ensures we always show the latest edited ingredients, not the original ones
   const getInitialAnalysisResult = () => {
     if (!existingMeal) return null;
-    
-    // If we have the original analysis, use it
-    if (existingMeal.original_analysis) {
-      return existingMeal.original_analysis;
-    }
-    
-    // Otherwise, construct from the saved meal data
+
+    // Always construct from the saved meal data to get latest ingredients
     return {
       meal_name: existingMeal.meal_name,
       meal_time: existingMeal.meal_time,
       total_calories: existingMeal.total_calories,
       macros: existingMeal.macros,
-      ingredients: existingMeal.ingredients,
+      ingredients: existingMeal.ingredients, // This comes from ai_analysis.ingredients (updated)
       confidence: existingMeal.confidence,
       notes: existingMeal.notes,
     };
@@ -214,7 +210,24 @@ const NutritionResultsScreen = ({ route, navigation }) => {
           setAnalysisResult(result.data);
           setIngredients(result.data.ingredients || []);
         } else {
-          setError(result.error);
+          // Check if it's a non-food detection error
+          if (result.error === 'NO_FOOD_DETECTED') {
+            Alert.alert(
+              'No Food Detected',
+              result.message || 'Please ensure food is visible in the frame and try again.',
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    // Navigate back to home screen
+                    navigation.navigate('Home');
+                  },
+                },
+              ]
+            );
+          } else {
+            setError(result.error);
+          }
         }
       } catch (err) {
         console.error('Analysis error:', err);
@@ -239,8 +252,26 @@ const NutritionResultsScreen = ({ route, navigation }) => {
     analyzeFoodPhoto(photoUri).then(result => {
       if (result.success) {
         setAnalysisResult(result.data);
+        setIngredients(result.data.ingredients || []);
       } else {
-        setError(result.error);
+        // Check if it's a non-food detection error
+        if (result.error === 'NO_FOOD_DETECTED') {
+          Alert.alert(
+            'No Food Detected',
+            result.message || 'Please ensure food is visible in the frame and try again.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Navigate back to home screen
+                  navigation.navigate('Home');
+                },
+              },
+            ]
+          );
+        } else {
+          setError(result.error);
+        }
       }
       setIsLoading(false);
     });
@@ -250,7 +281,8 @@ const NutritionResultsScreen = ({ route, navigation }) => {
     if (analysisResult) {
       try {
         // Format the meal with current servings (adjusts all macros)
-        const formattedMeal = formatMealForStorage(analysisResult, displayPhotoUri, servings);
+        // Pass the current ingredients state to ensure updated ingredients are saved
+        const formattedMeal = formatMealForStorage(analysisResult, displayPhotoUri, servings, ingredients);
 
         // If calories were manually adjusted, override the calculated value
         if (calorieOverride !== null) {
@@ -258,17 +290,24 @@ const NutritionResultsScreen = ({ route, navigation }) => {
         }
 
         if (isViewingExisting && existingMeal?.id) {
-          // Update existing meal with new values
-          await updateMeal(existingMeal.id, {
+          // Update existing meal with new values, including ingredients
+          console.log('[NutritionResults] Updating meal ID:', existingMeal.id);
+          console.log('[NutritionResults] Updated ingredients:', JSON.stringify(ingredients, null, 2));
+          console.log('[NutritionResults] Updated calories:', formattedMeal.total_calories);
+          console.log('[NutritionResults] Updated macros:', formattedMeal.macros);
+
+          const result = await updateMeal(existingMeal.id, {
             total_calories: formattedMeal.total_calories,
             macros: formattedMeal.macros,
             servings: servings,
+            ingredients: ingredients, // Include updated ingredients
           });
-          console.log('Meal updated successfully');
+
+          console.log('[NutritionResults] Update result:', result ? 'Success' : 'Failed');
         } else {
           // Save as new meal
           await saveMeal(formattedMeal);
-          console.log('Meal saved successfully');
+          console.log('[NutritionResults] New meal saved successfully');
 
           // Track meal logging in Mixpanel
           trackMealLog(
@@ -278,7 +317,8 @@ const NutritionResultsScreen = ({ route, navigation }) => {
           );
         }
       } catch (error) {
-        console.error('Error saving/updating meal:', error);
+        console.error('[NutritionResults] Error saving/updating meal:', error);
+        console.error('[NutritionResults] Error details:', error.message, error.stack);
       }
     }
     navigation.goBack();
@@ -301,7 +341,7 @@ const NutritionResultsScreen = ({ route, navigation }) => {
     try {
       console.log('[AI Adjustment] Starting meal adjustment with instructions:', adjustmentInstructions);
 
-      // Build the prompt for Claude
+      // Build the meal data
       const currentMealData = {
         meal_name: analysisResult.meal_name,
         total_calories: getDisplayedCalories(),
@@ -351,56 +391,109 @@ Please apply these changes to the meal data. Adjust the calories, macros, and in
   "notes": "Brief explanation of what was changed"
 }`;
 
-      // Make API call to Claude
-      const requestBody = {
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2000,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
+      let adjustedMealData = null;
+      let usedFallback = false;
+
+      // Try GPT-4o-mini first
+      try {
+        console.log('[AI Adjustment] Trying GPT-4o-mini...');
+        const openaiRequestBody = {
+          model: 'gpt-4o-mini',
+          max_tokens: 2000,
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+        };
+
+        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
           },
-        ],
-      };
+          body: JSON.stringify(openaiRequestBody),
+        });
 
-      console.log('[AI Adjustment] Sending request to Claude...');
+        if (openaiResponse.ok) {
+          const openaiData = await openaiResponse.json();
+          const content = openaiData.choices?.[0]?.message?.content;
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': CLAUDE_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(requestBody),
-      });
+          if (content) {
+            console.log('[AI Adjustment] GPT-4o-mini Response:', content);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[AI Adjustment] Claude API Error:', errorData);
-        throw new Error(errorData.error?.message || 'Failed to adjust meal');
+            // Parse the JSON response
+            let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              cleanedContent = jsonMatch[0];
+            }
+
+            adjustedMealData = JSON.parse(cleanedContent);
+            console.log('[AI Adjustment] GPT-4o-mini adjustment successful');
+          }
+        } else {
+          throw new Error('OpenAI request failed');
+        }
+      } catch (openaiError) {
+        console.warn('[AI Adjustment] GPT-4o-mini failed, falling back to Claude Haiku:', openaiError.message);
+        usedFallback = true;
+
+        // Fallback to Claude Haiku
+        const claudeRequestBody = {
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2000,
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+        };
+
+        console.log('[AI Adjustment] Sending request to Claude Haiku (fallback)...');
+
+        const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': CLAUDE_API_KEY,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify(claudeRequestBody),
+        });
+
+        if (!claudeResponse.ok) {
+          const errorData = await claudeResponse.json();
+          console.error('[AI Adjustment] Claude API Error:', errorData);
+          throw new Error(errorData.error?.message || 'Failed to adjust meal');
+        }
+
+        const claudeData = await claudeResponse.json();
+        const content = claudeData.content?.[0]?.text;
+
+        console.log('[AI Adjustment] Claude Response:', content);
+
+        if (!content) {
+          throw new Error('No response from AI');
+        }
+
+        // Parse the JSON response
+        let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          cleanedContent = jsonMatch[0];
+        }
+
+        adjustedMealData = JSON.parse(cleanedContent);
+        console.log('[AI Adjustment] Claude Haiku adjustment successful');
       }
 
-      const data = await response.json();
-      const content = data.content?.[0]?.text;
-
-      console.log('[AI Adjustment] Claude Response:', content);
-
-      if (!content) {
-        throw new Error('No response from AI');
+      if (!adjustedMealData) {
+        throw new Error('Failed to get response from AI');
       }
-
-      // Parse the JSON response
-      let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
-      // Try to find JSON in the response
-      const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        cleanedContent = jsonMatch[0];
-      }
-
-      const adjustedMealData = JSON.parse(cleanedContent);
-      console.log('[AI Adjustment] Meal adjustment successful');
 
       // Update the analysis result with new data
       setAnalysisResult(prev => ({

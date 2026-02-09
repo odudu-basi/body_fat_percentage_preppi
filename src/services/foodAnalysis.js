@@ -1,8 +1,8 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { CLAUDE_API_KEY } from '@env';
+import { OPENAI_API_KEY } from '@env';
 
-// Claude API Configuration
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+// OpenAI API Configuration
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 /**
  * Convert a local image URI to base64
@@ -23,14 +23,19 @@ const imageToBase64 = async (imageUri) => {
  * Build the food analysis prompt
  */
 const buildFoodAnalysisPrompt = () => {
-  return `You are an expert nutritionist and food analyst. Analyze this food photo and provide detailed nutritional information.
+  return `You are an expert nutritionist and food analyst. Analyze this photo to determine if it contains food and provide detailed nutritional information.
 
-**Your task:**
+**CRITICAL FIRST STEP - Food Detection:**
+- First, determine if the image contains recognizable food or beverages
+- If the image does NOT contain food (e.g., it's a person, object, scenery, text, blank screen, etc.), set "is_food" to false
+- If the image contains any edible food or beverage, set "is_food" to true
+
+**If IS food, then:**
 1. Identify the food items in the image
 2. Estimate portion sizes
 3. Calculate nutritional values including all macros and micronutrients
 
-**Guidelines:**
+**Guidelines for food analysis:**
 - Be specific about what you see (e.g., "White rice" not just "rice")
 - Estimate realistic portion sizes based on the plate/container
 - Provide accurate calorie and macro estimates
@@ -41,7 +46,8 @@ const buildFoodAnalysisPrompt = () => {
 **Return ONLY this JSON format (no other text):**
 
 {
-  "meal_name": "Descriptive name of the meal",
+  "is_food": true | false,
+  "meal_name": "Descriptive name of the meal (or empty string if not food)",
   "meal_time": "breakfast" | "lunch" | "dinner" | "snack",
   "total_calories": <number>,
   "macros": {
@@ -63,12 +69,12 @@ const buildFoodAnalysisPrompt = () => {
     }
   ],
   "confidence": "high" | "medium" | "low",
-  "notes": "Any relevant notes about the meal or estimation"
+  "notes": "Any relevant notes about the meal or estimation, or reason why it's not food"
 }`;
 };
 
 /**
- * Analyze food from a photo using Claude Vision API
+ * Analyze food from a photo using OpenAI GPT-4o-mini Vision API
  * @param {string} photoUri - URI of the food photo
  * @returns {Promise<Object>} - Analysis results
  */
@@ -83,54 +89,51 @@ export const analyzeFoodPhoto = async (photoUri) => {
     // Build the prompt
     const prompt = buildFoodAnalysisPrompt();
 
-    // Prepare the API request for Claude
+    // Prepare the API request for OpenAI
     const requestBody = {
-      model: 'claude-haiku-4-5-20251001',
+      model: 'gpt-4o-mini',
       max_tokens: 2000,
       messages: [
         {
           role: 'user',
           content: [
             {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: imageBase64,
-              },
-            },
-            {
               type: 'text',
               text: prompt,
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64}`,
+              },
             },
           ],
         },
       ],
     };
 
-    console.log('Sending request to Claude...');
+    console.log('Sending request to OpenAI...');
 
     // Make the API call
-    const response = await fetch(CLAUDE_API_URL, {
+    const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Claude API Error:', errorData);
+      console.error('OpenAI API Error:', errorData);
       throw new Error(errorData.error?.message || 'Failed to analyze food');
     }
 
     const data = await response.json();
-    const content = data.content?.[0]?.text;
+    const content = data.choices?.[0]?.message?.content;
 
-    console.log('Claude Response:', content);
+    console.log('OpenAI Response:', content);
 
     if (!content) {
       throw new Error('No response from AI');
@@ -147,6 +150,17 @@ export const analyzeFoodPhoto = async (photoUri) => {
 
     try {
       const analysisResult = JSON.parse(cleanedContent);
+
+      // Check if the image contains food
+      if (analysisResult.is_food === false) {
+        console.log('Non-food item detected:', analysisResult.notes);
+        return {
+          success: false,
+          error: 'NO_FOOD_DETECTED',
+          message: 'Please ensure food is visible in the frame and try again.',
+        };
+      }
+
       console.log('Food analysis successful:', analysisResult.meal_name);
       return {
         success: true,

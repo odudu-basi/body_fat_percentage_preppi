@@ -216,7 +216,7 @@ const OnboardingKitchenItemsScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '75%' }]} />
+            <View style={[styles.progressBarFill, { width: '82%' }]} />
           </View>
         </View>
 

@@ -6,21 +6,23 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
-import * as ImagePicker from 'expo-image-picker';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import SettingsButton from '../components/common/SettingsButton';
-import NutritionCarousel from '../components/common/NutritionCarousel';
 import DailyChecklist from '../components/common/DailyChecklist';
 import ExerciseList from '../components/common/ExerciseList';
-import AddCaloriesBox from '../components/common/AddCaloriesBox';
-import CalorieMealCard from '../components/common/CalorieMealCard';
-import { getTodaysMeals, deleteMeal, getTodaysCalories } from '../services/mealStorage';
+import LoadingIndicator from '../components/common/LoadingIndicator';
+import { Ionicons } from '@expo/vector-icons';
+import { saveMeal, deleteMeal } from '../services/mealStorage';
+import { generateDailyMealPlan } from '../services/mealPlanGeneration';
+import { generateMealPlanImages } from '../services/imageGeneration';
+import { saveDailyMealPlan, getMealPlanForDate, updateMealCompletion } from '../services/mealPlanStorage';
+import { getLocalDateString } from '../utils/dateUtils';
 import { removeDuplicateChecklistItems } from '../services/checklistStorage';
 import { useAuth } from '../context/AuthContext';
-import { trackMealPhotoCapture, trackMealDelete } from '../utils/analytics';
 
 const DailyScreen = () => {
   const insets = useSafeAreaInsets();
@@ -29,28 +31,11 @@ const DailyScreen = () => {
   const { profile } = useAuth();
   const initialTab = route.params?.initialTab || 'Checklist';
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [todaysMeals, setTodaysMeals] = useState([]);
-  const [totalCalories, setTotalCalories] = useState(0);
   const [exerciseCalories, setExerciseCalories] = useState(0);
-  const [macrosConsumed, setMacrosConsumed] = useState({
-    protein_g: 0,
-    carbs_g: 0,
-    fats_g: 0,
-    fiber_g: 0,
-    sodium_mg: 0,
-    sugar_g: 0,
-  });
-
-  // Get nutrition targets from profile (or use defaults)
-  const dailyCalorieTarget = profile?.daily_calorie_target || 2000;
-  const macroTargets = {
-    protein_g: profile?.protein_g || 150,
-    carbs_g: profile?.carbs_g || 175,
-    fats_g: profile?.fats_g || 55,
-    fiber_g: profile?.fiber_g || 30,
-    sodium_mg: profile?.sodium_mg || 2300,
-    sugar_g: profile?.sugar_g || 50,
-  };
+  // Meal plan state (for Nutrition tab)
+  const [mealPlan, setMealPlan] = useState(null);
+  const [isGeneratingMeals, setIsGeneratingMeals] = useState(false);
+  const [mealGenerationProgress, setMealGenerationProgress] = useState(0);
 
   // Update active tab if navigation params change
   useEffect(() => {
@@ -70,198 +55,162 @@ const DailyScreen = () => {
     cleanupDuplicates();
   }, []);
 
-  // Load today's meals when screen is focused
-  const loadMeals = useCallback(async () => {
+  // Load today's meal plan when screen is focused
+  const loadTodayMealPlan = useCallback(async () => {
     try {
-      const meals = await getTodaysMeals();
-      const calories = await getTodaysCalories();
-
-      // Calculate consumed macros from meals
-      const consumedMacros = meals.reduce((acc, meal) => {
-        return {
-          protein_g: acc.protein_g + (meal.macros?.protein_g || 0),
-          carbs_g: acc.carbs_g + (meal.macros?.carbs_g || 0),
-          fats_g: acc.fats_g + (meal.macros?.fat_g || 0),
-          fiber_g: acc.fiber_g + (meal.macros?.fiber_g || 0),
-          sodium_mg: acc.sodium_mg + (meal.macros?.sodium_mg || 0),
-          sugar_g: acc.sugar_g + (meal.macros?.sugar_g || 0),
-        };
-      }, {
-        protein_g: 0,
-        carbs_g: 0,
-        fats_g: 0,
-        fiber_g: 0,
-        sodium_mg: 0,
-        sugar_g: 0,
-      });
-
-      setTodaysMeals(meals);
-      setTotalCalories(calories);
-      setMacrosConsumed(consumedMacros);
-      console.log('[DailyScreen] Loaded meals:', meals.length, 'Total calories:', calories, 'Macros:', consumedMacros);
+      const todayDate = getLocalDateString(new Date());
+      console.log('[DailyScreen] Loading meal plan for:', todayDate);
+      const plan = await getMealPlanForDate(todayDate);
+      setMealPlan(plan);
+      console.log('[DailyScreen] Meal plan loaded:', plan ? 'found' : 'not found');
     } catch (error) {
-      console.error('[DailyScreen] Error loading meals:', error);
+      console.error('[DailyScreen] Error loading meal plan:', error);
+      setMealPlan(null);
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadMeals();
-    }, [loadMeals])
+      loadTodayMealPlan();
+    }, [loadTodayMealPlan])
   );
 
-  // Handle meal card press - navigate to nutrition results
-  const handleMealCardPress = (meal) => {
-    navigation.navigate('NutritionResults', { existingMeal: meal });
+  // Handle create meals button press
+  const handleCreateMeals = async () => {
+    if (!profile) {
+      Alert.alert('Profile Required', 'Please complete your profile first.');
+      return;
+    }
+
+    try {
+      setIsGeneratingMeals(true);
+      setMealGenerationProgress(0);
+
+      // Stage 1: Generating meal plan (0-40%)
+      console.log('[DailyScreen] Generating meal plan...');
+      setMealGenerationProgress(20);
+      const mealPlanResult = await generateDailyMealPlan(profile);
+
+      if (!mealPlanResult.success) {
+        throw new Error(mealPlanResult.error);
+      }
+      setMealGenerationProgress(40);
+
+      // Stage 2: Generating meal images (40-80%)
+      console.log('[DailyScreen] Generating meal images...');
+      const mealsWithImages = await generateMealPlanImages(mealPlanResult.data.meals);
+      setMealGenerationProgress(80);
+
+      const finalMealPlan = {
+        ...mealPlanResult.data,
+        meals: mealsWithImages,
+      };
+
+      // Stage 3: Saving meal plan (80-100%)
+      console.log('[DailyScreen] Saving meal plan...');
+      const todayDate = getLocalDateString(new Date());
+      await saveDailyMealPlan(todayDate, finalMealPlan);
+      setMealGenerationProgress(100);
+
+      console.log('[DailyScreen] Meal plan created successfully!');
+      setMealPlan(finalMealPlan);
+
+      Alert.alert('Success', 'Your meal plan has been created!');
+    } catch (error) {
+      console.error('[DailyScreen] Error creating meals:', error);
+      Alert.alert('Error', 'Failed to create meal plan. Please try again.');
+    } finally {
+      setIsGeneratingMeals(false);
+      setMealGenerationProgress(0);
+    }
   };
 
-  // Handle meal deletion
-  const handleDeleteMeal = async (mealId) => {
+  // Handle meal checkbox toggle
+  const handleMealToggle = async (mealType, currentStatus) => {
     try {
-      // Find the meal before deleting to get its info
-      const meal = todaysMeals.find(m => m.id === mealId);
+      const todayDate = getLocalDateString(new Date());
+      const newStatus = !currentStatus;
 
-      await deleteMeal(mealId);
-      await loadMeals(); // Refresh the list
-      console.log('[DailyScreen] Meal deleted:', mealId);
+      // Find the meal from the plan
+      const meal = mealPlan.meals.find(m => m.meal_type === mealType);
+      if (!meal) return;
 
-      // Track meal deletion in Mixpanel
-      if (meal) {
-        trackMealDelete(meal.meal_type || 'unknown', meal.total_calories || 0);
+      if (newStatus) {
+        // Checking the meal - save to meal_logs
+        console.log('[DailyScreen] Saving meal to logs:', meal.name);
+
+        const structuredIngredients = (meal.ingredients || []).map(ingredient => {
+          if (typeof ingredient === 'object' && ingredient.name) {
+            return ingredient;
+          }
+          return {
+            name: typeof ingredient === 'string' ? ingredient : String(ingredient),
+            portion: meal.portion_details || 'As specified',
+            calories: 0,
+          };
+        });
+
+        const mealData = {
+          meal_name: meal.name,
+          meal_time: meal.meal_type,
+          total_calories: meal.calories,
+          macros: {
+            protein_g: meal.protein_g || 0,
+            carbs_g: meal.carbs_g || 0,
+            fat_g: meal.fat_g || 0,
+            fiber_g: meal.fiber_g || 0,
+            sugar_g: meal.sugar_g || 0,
+            sodium_mg: meal.sodium_mg || 0,
+          },
+          servings: 1,
+          notes: `From meal plan: ${todayDate}`,
+          photo_uri: meal.image_uri || null,
+          ingredients: structuredIngredients,
+          confidence: 'high',
+          date: todayDate,
+        };
+
+        const savedMeal = await saveMeal(mealData);
+        console.log('[DailyScreen] Meal saved with ID:', savedMeal.id);
+
+        // Update meal plan with meal_log_id
+        await updateMealCompletion(todayDate, mealType, newStatus, savedMeal.id);
+
+        // Update local state
+        setMealPlan(prev => ({
+          ...prev,
+          meals: prev.meals.map(m =>
+            m.meal_type === mealType ? { ...m, completed: newStatus, meal_log_id: savedMeal.id } : m
+          ),
+        }));
+
+      } else {
+        // Unchecking the meal - delete from meal_logs
+        console.log('[DailyScreen] Deleting meal from logs:', meal.meal_log_id);
+
+        if (meal.meal_log_id) {
+          await deleteMeal(meal.meal_log_id);
+          console.log('[DailyScreen] Meal deleted');
+        }
+
+        // Update meal plan
+        await updateMealCompletion(todayDate, mealType, newStatus, null);
+
+        // Update local state
+        setMealPlan(prev => ({
+          ...prev,
+          meals: prev.meals.map(m =>
+            m.meal_type === mealType ? { ...m, completed: newStatus, meal_log_id: null } : m
+          ),
+        }));
       }
     } catch (error) {
-      console.error('[DailyScreen] Error deleting meal:', error);
-      Alert.alert('Error', 'Failed to delete meal. Please try again.');
+      console.error('[DailyScreen] Error toggling meal:', error);
+      Alert.alert('Error', 'Failed to update meal. Please try again.');
     }
   };
 
   const tabs = ['Checklist', 'Nutrition', 'Exercise'];
-
-  // Request camera permission
-  const requestCameraPermission = async () => {
-    console.log('[DailyScreen] Requesting camera permission...');
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      console.log('[DailyScreen] Camera permission status:', status);
-      if (status !== 'granted') {
-        Alert.alert(
-          'Camera Permission Required',
-          'Please enable camera access in your device settings to take photos.',
-          [{ text: 'OK' }]
-        );
-        return false;
-      }
-      return true;
-    } catch (error) {
-      console.error('[DailyScreen] Camera permission error:', error);
-      return false;
-    }
-  };
-
-  // Request media library permission
-  const requestMediaLibraryPermission = async () => {
-    console.log('[DailyScreen] Requesting media library permission...');
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      console.log('[DailyScreen] Media library permission status:', status);
-      if (status !== 'granted') {
-        Alert.alert(
-          'Photo Library Permission Required',
-          'Please enable photo library access in your device settings.',
-          [{ text: 'OK' }]
-        );
-        return false;
-      }
-      return true;
-    } catch (error) {
-      console.error('[DailyScreen] Media library permission error:', error);
-      return false;
-    }
-  };
-
-  // Take photo with camera
-  const takePhotoWithCamera = async () => {
-    console.log('[DailyScreen] takePhotoWithCamera called');
-    try {
-      const hasPermission = await requestCameraPermission();
-      console.log('[DailyScreen] Has camera permission:', hasPermission);
-      if (!hasPermission) return;
-
-      console.log('[DailyScreen] Launching camera...');
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-      console.log('[DailyScreen] Camera result:', JSON.stringify(result, null, 2));
-
-      if (!result.canceled && result.assets && result.assets[0]) {
-        console.log('[DailyScreen] Navigating to NutritionResults with URI:', result.assets[0].uri);
-        // Track meal photo capture from camera
-        trackMealPhotoCapture('camera');
-        navigation.navigate('NutritionResults', { photoUri: result.assets[0].uri });
-      } else {
-        console.log('[DailyScreen] Camera was canceled or no assets');
-      }
-    } catch (error) {
-      console.error('[DailyScreen] Camera error:', error);
-      Alert.alert('Error', 'Failed to open camera. Please try again.');
-    }
-  };
-
-  // Choose from library
-  const chooseFromLibrary = async () => {
-    console.log('[DailyScreen] chooseFromLibrary called');
-    try {
-      const hasPermission = await requestMediaLibraryPermission();
-      console.log('[DailyScreen] Has media library permission:', hasPermission);
-      if (!hasPermission) return;
-
-      console.log('[DailyScreen] Launching image library...');
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-      console.log('[DailyScreen] Library result:', JSON.stringify(result, null, 2));
-
-      if (!result.canceled && result.assets && result.assets[0]) {
-        console.log('[DailyScreen] Navigating to NutritionResults with URI:', result.assets[0].uri);
-        // Track meal photo capture from library
-        trackMealPhotoCapture('library');
-        navigation.navigate('NutritionResults', { photoUri: result.assets[0].uri });
-      } else {
-        console.log('[DailyScreen] Library selection was canceled or no assets');
-      }
-    } catch (error) {
-      console.error('[DailyScreen] Library error:', error);
-      Alert.alert('Error', 'Failed to open photo library. Please try again.');
-    }
-  };
-
-  // Handle photo button press
-  const handlePhotoPress = () => {
-    console.log('[DailyScreen] handlePhotoPress called');
-    // Use Alert for both platforms to avoid ActionSheetIOS issues with modal timing
-    Alert.alert(
-      'Add Food Photo',
-      'Choose an option',
-      [
-        { text: 'Cancel', style: 'cancel', onPress: () => console.log('[DailyScreen] Cancel pressed') },
-        { text: 'Take Photo', onPress: () => {
-          console.log('[DailyScreen] Take Photo selected');
-          takePhotoWithCamera();
-        }},
-        { text: 'Choose from Library', onPress: () => {
-          console.log('[DailyScreen] Choose from Library selected');
-          chooseFromLibrary();
-        }},
-      ]
-    );
-  };
-
 
   // Dynamic header text based on active tab
   const getHeaderText = () => {
@@ -269,11 +218,11 @@ const DailyScreen = () => {
       case 'Checklist':
         return { orange: 'Your', rest: ' daily routine' };
       case 'Nutrition':
-        return { orange: 'Track', rest: ' your calories' };
+        return { orange: 'Your', rest: ' meal plan' };
       case 'Exercise':
         return { orange: 'Your', rest: ' Workouts' };
       default:
-        return { orange: 'Track', rest: ' your calories' };
+        return { orange: 'Your', rest: ' meal plan' };
     }
   };
 
@@ -321,45 +270,78 @@ const DailyScreen = () => {
       >
         {activeTab === 'Nutrition' && (
           <View>
-            {/* Nutrition Carousel - Calories & Macros */}
-            <NutritionCarousel
-              caloriesConsumed={totalCalories}
-              dailyTarget={dailyCalorieTarget}
-              bonusCalories={exerciseCalories}
-              // Primary macros - consumed and targets
-              proteinConsumed={macrosConsumed.protein_g}
-              proteinTarget={macroTargets.protein_g}
-              carbsConsumed={macrosConsumed.carbs_g}
-              carbsTarget={macroTargets.carbs_g}
-              fatsConsumed={macrosConsumed.fats_g}
-              fatsTarget={macroTargets.fats_g}
-              // Secondary macros - consumed and targets
-              fiberConsumed={macrosConsumed.fiber_g}
-              fiberTarget={macroTargets.fiber_g}
-              sodiumConsumed={macrosConsumed.sodium_mg}
-              sodiumTarget={macroTargets.sodium_mg}
-              sugarConsumed={macrosConsumed.sugar_g}
-              sugarTarget={macroTargets.sugar_g}
-            />
-            
-            {/* Add Calories Box */}
-            <AddCaloriesBox
-              onPhoto={handlePhotoPress}
-            />
+            {/* Meal Plan Content for Today */}
+            {isGeneratingMeals ? (
+              <View style={styles.loadingContainer}>
+                <LoadingIndicator
+                  text="Generating your meal plan..."
+                  subtext="This may take a moment"
+                  progress={mealGenerationProgress}
+                />
+              </View>
+            ) : mealPlan && mealPlan.meals ? (
+              <View style={styles.mealCardsContainer}>
+                {mealPlan.meals.map((meal, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.mealCard}
+                    onPress={() => {
+                      const todayDate = getLocalDateString(new Date());
+                      navigation.navigate('MealDetails', { meal, date: todayDate });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    {/* Meal Image */}
+                    <View style={styles.mealImageContainer}>
+                      {meal.image_uri ? (
+                        <Image
+                          source={{ uri: meal.image_uri }}
+                          style={styles.mealImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.mealImage, styles.mealImagePlaceholder]}>
+                          <Ionicons name="fast-food" size={32} color={Colors.dark.textSecondary} />
+                        </View>
+                      )}
+                    </View>
 
-            {/* Today's Logged Meals */}
-            {todaysMeals.length > 0 && (
-              <View style={styles.mealsSection}>
-                <Text style={styles.mealsSectionTitle}>Today's Meals</Text>
-                {todaysMeals.map((meal) => (
-                  <View key={meal.id} style={styles.mealCardWrapper}>
-                    <CalorieMealCard
-                      meal={meal}
-                      onPress={() => handleMealCardPress(meal)}
-                      onDelete={handleDeleteMeal}
-                    />
-                  </View>
+                    {/* Meal Info */}
+                    <View style={styles.mealInfo}>
+                      <Text style={styles.mealName} numberOfLines={2}>
+                        {meal.name}
+                      </Text>
+                      <Text style={styles.mealCalories}>{meal.calories} kcal</Text>
+                    </View>
+
+                    {/* Checkbox */}
+                    <TouchableOpacity
+                      style={styles.mealCheckbox}
+                      onPress={() => handleMealToggle(meal.meal_type, meal.completed)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[
+                        styles.checkbox,
+                        meal.completed && styles.checkboxChecked
+                      ]}>
+                        {meal.completed && (
+                          <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
                 ))}
+              </View>
+            ) : (
+              <View style={styles.dayContentContainer}>
+                <Text style={styles.dayContentText}>No meal plan for today</Text>
+                <TouchableOpacity
+                  style={styles.createMealsButton}
+                  activeOpacity={0.8}
+                  onPress={handleCreateMeals}
+                >
+                  <Text style={styles.createMealsButtonText}>Generate meal plan</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -448,18 +430,100 @@ const styles = StyleSheet.create({
     fontSize: Fonts.sizes.md,
     color: Colors.dark.textSecondary,
   },
-  // Meals section
-  mealsSection: {
-    marginTop: Spacing.lg,
+  // Meal plan styles
+  loadingContainer: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.xxl * 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  mealsSectionTitle: {
+  mealCardsContainer: {
+    marginTop: Spacing.md,
+    gap: Spacing.md,
+  },
+  mealCard: {
+    flexDirection: 'row',
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+  },
+  mealImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+  },
+  mealImage: {
+    width: '100%',
+    height: '100%',
+  },
+  mealImagePlaceholder: {
+    backgroundColor: Colors.dark.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mealInfo: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  mealName: {
     fontFamily: 'Rubik_600SemiBold',
-    fontSize: Fonts.sizes.lg,
+    fontSize: Fonts.sizes.md,
     color: Colors.dark.textPrimary,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.xs,
   },
-  mealCardWrapper: {
-    marginBottom: Spacing.sm,
+  mealCalories: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: Fonts.sizes.sm,
+    color: Colors.dark.primary,
+  },
+  mealCheckbox: {
+    marginLeft: Spacing.sm,
+  },
+  checkbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.dark.textSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.dark.primary,
+    borderColor: Colors.dark.primary,
+  },
+  dayContentContainer: {
+    marginTop: Spacing.md,
+    borderWidth: 2,
+    borderColor: Colors.dark.textSecondary,
+    borderStyle: 'dashed',
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.dark.surface,
+    paddingVertical: Spacing.xxl * 2,
+    paddingHorizontal: Spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayContentText: {
+    fontFamily: 'Inter_500Medium',
+    fontSize: Fonts.sizes.md,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing.lg,
+  },
+  createMealsButton: {
+    backgroundColor: Colors.dark.primary,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.full,
+  },
+  createMealsButtonText: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.md,
+    color: '#FFFFFF',
   },
 });
 

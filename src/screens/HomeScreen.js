@@ -21,15 +21,27 @@ import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import DailyCalorieCard from '../components/common/DailyCalorieCard';
 import SettingsButton from '../components/common/SettingsButton';
 import LoadingIndicator from '../components/common/LoadingIndicator';
-import { getTodaysCalories, saveMeal, deleteMeal } from '../services/mealStorage';
+import NutritionCarousel from '../components/common/NutritionCarousel';
+import AddCaloriesBox from '../components/common/AddCaloriesBox';
+import CalorieMealCard from '../components/common/CalorieMealCard';
+import { getTodaysCalories, saveMeal, deleteMeal, getMealsForDateRange } from '../services/mealStorage';
 import { getTodaysBurnedCalories } from '../services/exerciseStorage';
 import { generateDailyMealPlan } from '../services/mealPlanGeneration';
 import { generateMealPlanImages } from '../services/imageGeneration';
 import { saveDailyMealPlan, getMealPlanForDate, updateMealCompletion } from '../services/mealPlanStorage';
 import { useAuth } from '../context/AuthContext';
-import { trackLogoPress } from '../utils/analytics';
-import { trackTikTokViewContent } from '../services/tiktokTracking';
+import { trackLogoPress, trackMealDelete } from '../utils/analytics';
 import { getLocalDateString } from '../utils/dateUtils';
+
+// Safely import TikTok tracking - only works in production builds
+let trackTikTokViewContent;
+try {
+  const tiktok = require('../services/tiktokTracking');
+  trackTikTokViewContent = tiktok.trackTikTokViewContent || (() => {});
+} catch (e) {
+  console.log('[HomeScreen] TikTok tracking not available');
+  trackTikTokViewContent = () => {};
+}
 
 const { width } = Dimensions.get('window');
 
@@ -41,9 +53,16 @@ const HomeScreen = () => {
   const [exerciseCalories, setExerciseCalories] = useState(0);
   const [selectedDayIndex, setSelectedDayIndex] = useState(new Date().getDay());
   const [todayDayIndex] = useState(new Date().getDay()); // Track today's day index
-  const [mealPlan, setMealPlan] = useState(null);
-  const [isGeneratingMeals, setIsGeneratingMeals] = useState(false);
-  const [mealGenerationProgress, setMealGenerationProgress] = useState(0);
+  const [selectedDayMeals, setSelectedDayMeals] = useState([]); // Meals for selected day
+  const [selectedDayCalories, setSelectedDayCalories] = useState(0); // Calories for selected day
+  const [selectedDayMacros, setSelectedDayMacros] = useState({ // Macros for selected day
+    protein_g: 0,
+    carbs_g: 0,
+    fats_g: 0,
+    fiber_g: 0,
+    sodium_mg: 0,
+    sugar_g: 0,
+  });
 
   // Weight editing state
   const [showCurrentWeightModal, setShowCurrentWeightModal] = useState(false);
@@ -123,36 +142,110 @@ const HomeScreen = () => {
     return getLocalDateString(targetDate);
   };
 
-  // Load meal plan for selected day
-  const loadMealPlanForDay = async (dayIndex) => {
+  // Load meals for selected day
+  const loadMealsForDay = useCallback(async (dayIndex) => {
     try {
       const dateStr = getDateForDayIndex(dayIndex);
-      console.log('[HomeScreen] Loading meal plan for:', dateStr);
-      const plan = await getMealPlanForDate(dateStr);
-      setMealPlan(plan);
-      console.log('[HomeScreen] Meal plan loaded:', plan ? 'found' : 'not found');
-    } catch (error) {
-      console.error('[HomeScreen] Error loading meal plan:', error);
-      setMealPlan(null);
-    }
-  };
+      console.log('[HomeScreen] Loading meals for:', dateStr);
 
-  // Load meal plan when selected day changes
+      // Get meals for the selected date
+      const meals = await getMealsForDateRange(dateStr, dateStr);
+
+      // Calculate total calories
+      const calories = meals.reduce((sum, meal) => sum + (meal.total_calories || 0), 0);
+
+      // Calculate consumed macros from meals
+      const consumedMacros = meals.reduce((acc, meal) => {
+        return {
+          protein_g: acc.protein_g + (meal.macros?.protein_g || 0),
+          carbs_g: acc.carbs_g + (meal.macros?.carbs_g || 0),
+          fats_g: acc.fats_g + (meal.macros?.fat_g || 0),
+          fiber_g: acc.fiber_g + (meal.macros?.fiber_g || 0),
+          sodium_mg: acc.sodium_mg + (meal.macros?.sodium_mg || 0),
+          sugar_g: acc.sugar_g + (meal.macros?.sugar_g || 0),
+        };
+      }, {
+        protein_g: 0,
+        carbs_g: 0,
+        fats_g: 0,
+        fiber_g: 0,
+        sodium_mg: 0,
+        sugar_g: 0,
+      });
+
+      setSelectedDayMeals(meals);
+      setSelectedDayCalories(calories);
+      setSelectedDayMacros(consumedMacros);
+      console.log('[HomeScreen] Loaded', meals.length, 'meals for', dateStr, '- Calories:', calories);
+    } catch (error) {
+      console.error('[HomeScreen] Error loading meals for day:', error);
+      setSelectedDayMeals([]);
+      setSelectedDayCalories(0);
+      setSelectedDayMacros({
+        protein_g: 0,
+        carbs_g: 0,
+        fats_g: 0,
+        fiber_g: 0,
+        sodium_mg: 0,
+        sugar_g: 0,
+      });
+    }
+  }, []);
+
+  // Load meals when selected day changes
   useEffect(() => {
     if (isAuthenticated && user) {
-      loadMealPlanForDay(selectedDayIndex);
+      loadMealsForDay(selectedDayIndex);
     }
-  }, [selectedDayIndex, isAuthenticated, user]);
+  }, [selectedDayIndex, isAuthenticated, user, loadMealsForDay]);
 
-  // Reload meal plan when screen comes back into focus (to get updated recipes)
+  // Reload meals when screen comes back into focus
   useFocusEffect(
     useCallback(() => {
       if (isAuthenticated && user) {
-        loadMealPlanForDay(selectedDayIndex);
+        loadMealsForDay(selectedDayIndex);
       }
-    }, [selectedDayIndex, isAuthenticated, user])
+    }, [selectedDayIndex, isAuthenticated, user, loadMealsForDay])
   );
 
+  // Handle meal card press - navigate to nutrition results
+  const handleMealCardPress = (meal) => {
+    navigation.navigate('NutritionResults', { existingMeal: meal });
+  };
+
+  // Handle meal deletion
+  const handleDeleteMeal = async (mealId) => {
+    try {
+      // Find the meal before deleting to get its info
+      const meal = selectedDayMeals.find(m => m.id === mealId);
+
+      await deleteMeal(mealId);
+      await loadMealsForDay(selectedDayIndex); // Refresh the list
+      console.log('[HomeScreen] Meal deleted:', mealId);
+
+      // Track meal deletion in Mixpanel
+      if (meal) {
+        trackMealDelete(meal.meal_type || 'unknown', meal.total_calories || 0);
+      }
+    } catch (error) {
+      console.error('[HomeScreen] Error deleting meal:', error);
+      Alert.alert('Error', 'Failed to delete meal. Please try again.');
+    }
+  };
+
+  // Handle photo button press - go straight to camera
+  const handlePhotoPress = () => {
+    console.log('[HomeScreen] handlePhotoPress called - navigating to CustomCamera');
+    navigation.navigate('CustomCamera');
+  };
+
+  // Handle meal plan button press - navigate to Daily > Nutrition tab
+  const handleMealPlanPress = () => {
+    console.log('[HomeScreen] handleMealPlanPress called - navigating to Daily Nutrition tab');
+    navigation.navigate('Daily', { initialTab: 'Nutrition' });
+  };
+
+  // DEPRECATED: Meal plan functions moved to DailyScreen
   // Handle create meals button press
   const handleCreateMeals = async () => {
     if (!profile) {
@@ -456,89 +549,51 @@ const HomeScreen = () => {
             ))}
           </ScrollView>
 
-          {/* Content for selected day */}
-          {isGeneratingMeals ? (
-            <View style={styles.loadingContainer}>
-              <LoadingIndicator
-                text="Generating your meal plan..."
-                subtext="This may take a moment"
-                progress={mealGenerationProgress}
-              />
-            </View>
-          ) : mealPlan && mealPlan.meals ? (
-            <View style={styles.mealCardsContainer}>
-              {mealPlan.meals.map((meal, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.mealCard}
-                  onPress={() => {
-                    const dateStr = getDateForDayIndex(selectedDayIndex);
-                    navigation.navigate('MealDetails', { meal, date: dateStr });
-                  }}
-                  activeOpacity={0.7}
-                >
-                  {/* Meal Image */}
-                  <View style={styles.mealImageContainer}>
-                    {meal.image_uri ? (
-                      <Image
-                        source={{ uri: meal.image_uri }}
-                        style={styles.mealImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={[styles.mealImage, styles.mealImagePlaceholder]}>
-                        <Ionicons name="fast-food" size={32} color={Colors.dark.textSecondary} />
-                      </View>
-                    )}
+          {/* Calorie Tracking Content for Selected Day */}
+          <View style={styles.nutritionSection}>
+            {/* Nutrition Carousel - Calories & Macros */}
+            <NutritionCarousel
+              caloriesConsumed={selectedDayCalories}
+              dailyTarget={profile?.daily_calorie_target || 2000}
+              bonusCalories={selectedDayIndex === todayDayIndex ? exerciseCalories : 0}
+              // Primary macros - consumed and targets
+              proteinConsumed={selectedDayMacros.protein_g}
+              proteinTarget={profile?.protein_g || 150}
+              carbsConsumed={selectedDayMacros.carbs_g}
+              carbsTarget={profile?.carbs_g || 175}
+              fatsConsumed={selectedDayMacros.fats_g}
+              fatsTarget={profile?.fats_g || 55}
+              // Secondary macros - consumed and targets
+              fiberConsumed={selectedDayMacros.fiber_g}
+              fiberTarget={profile?.fiber_g || 30}
+              sodiumConsumed={selectedDayMacros.sodium_mg}
+              sodiumTarget={profile?.sodium_mg || 2300}
+              sugarConsumed={selectedDayMacros.sugar_g}
+              sugarTarget={profile?.sugar_g || 50}
+            />
+
+            {/* Add Calories Box */}
+            <AddCaloriesBox
+              onPhoto={handlePhotoPress}
+              onMealPlan={handleMealPlanPress}
+            />
+
+            {/* Selected Day's Logged Meals */}
+            {selectedDayMeals.length > 0 && (
+              <View style={styles.mealsSection}>
+                <Text style={styles.mealsSectionTitle}>Logged Meals</Text>
+                {selectedDayMeals.map((meal) => (
+                  <View key={meal.id} style={styles.mealCardWrapper}>
+                    <CalorieMealCard
+                      meal={meal}
+                      onPress={() => handleMealCardPress(meal)}
+                      onDelete={handleDeleteMeal}
+                    />
                   </View>
-
-                  {/* Meal Info */}
-                  <View style={styles.mealInfo}>
-                    <Text style={styles.mealName} numberOfLines={2}>
-                      {meal.name}
-                    </Text>
-                    <Text style={styles.mealCalories}>{meal.calories} kcal</Text>
-                  </View>
-
-                  {/* Checkbox */}
-                  <TouchableOpacity
-                    style={styles.mealCheckbox}
-                    onPress={() => handleMealToggle(meal.meal_type, meal.completed)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[
-                      styles.checkbox,
-                      meal.completed && styles.checkboxChecked
-                    ]}>
-                      {meal.completed && (
-                        <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.dayContentContainer}>
-              <Text style={styles.dayContentText}>Nothing to show for today</Text>
-              <TouchableOpacity
-                style={styles.createMealsButton}
-                activeOpacity={0.8}
-                onPress={handleCreateMeals}
-              >
-                <Text style={styles.createMealsButtonText}>Create meals for today</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {/* Calorie Card - Same as Nutrition tab */}
-        <View style={styles.calorieSection}>
-          <DailyCalorieCard
-            caloriesConsumed={totalCalories}
-            dailyTarget={profile?.daily_calorie_target || 2000}
-            bonusCalories={exerciseCalories}
-          />
+                ))}
+              </View>
+            )}
+          </View>
         </View>
       </ScrollView>
 
@@ -708,6 +763,22 @@ const styles = StyleSheet.create({
   },
   daySliderSection: {
     marginTop: Spacing.lg,
+  },
+  nutritionSection: {
+    marginTop: Spacing.md,
+  },
+  // Meals section
+  mealsSection: {
+    marginTop: Spacing.lg,
+  },
+  mealsSectionTitle: {
+    fontFamily: 'Rubik_600SemiBold',
+    fontSize: Fonts.sizes.lg,
+    color: Colors.dark.textPrimary,
+    marginBottom: Spacing.md,
+  },
+  mealCardWrapper: {
+    marginBottom: Spacing.sm,
   },
   daySliderContainer: {
     flexDirection: 'row',

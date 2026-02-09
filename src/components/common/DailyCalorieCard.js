@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../../constants/theme';
 
@@ -22,6 +23,25 @@ const DailyCalorieCard = ({
   const displayValue = showConsumed ? caloriesConsumed : caloriesLeft;
   const displayLabel = showConsumed ? 'Calories consumed' : 'Calories left';
 
+  // Calculate progress for ring (0-200%)
+  const effectiveTarget = dailyTarget - bonusCalories; // Adjust target by bonus calories
+  const progressPercentage = Math.min((caloriesConsumed / effectiveTarget) * 100, 200);
+
+  // Determine ring color and progress value
+  let ringColor = Colors.dark.primary; // Orange (#E85D04)
+  let displayProgress = progressPercentage;
+
+  if (progressPercentage > 100) {
+    ringColor = '#FF3B30'; // Red
+    displayProgress = progressPercentage - 100; // Show 0-100% in red zone
+  }
+
+  // SVG Circle calculations
+  const STROKE_WIDTH = 6;
+  const radius = (RING_SIZE - STROKE_WIDTH) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDashoffset = circumference - (displayProgress / 100) * circumference;
+
   const handlePress = () => {
     setShowConsumed(!showConsumed);
   };
@@ -34,8 +54,32 @@ const DailyCalorieCard = ({
     >
       {/* Left side - Ring with flame icon */}
       <View style={styles.ringContainer}>
-        {/* Outer ring (track) */}
-        <View style={styles.ringTrack} />
+        {/* SVG Progress Ring */}
+        <Svg width={RING_SIZE} height={RING_SIZE} style={styles.svgRing}>
+          {/* Background track (gray) */}
+          <Circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={radius}
+            stroke="rgba(160, 160, 160, 0.3)"
+            strokeWidth={STROKE_WIDTH}
+            fill="none"
+          />
+          {/* Progress ring (orange or red) */}
+          <Circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={radius}
+            stroke={ringColor}
+            strokeWidth={STROKE_WIDTH}
+            fill="none"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            rotation="-90"
+            origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
+          />
+        </Svg>
         {/* Inner content */}
         <View style={styles.ringCenter}>
           <Ionicons name="flame" size={28} color={Colors.dark.textPrimary} />
@@ -112,13 +156,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ringTrack: {
+  svgRing: {
     position: 'absolute',
-    width: RING_SIZE,
-    height: RING_SIZE,
-    borderRadius: RING_SIZE / 2,
-    borderWidth: 6,
-    borderColor: 'rgba(160, 160, 160, 0.3)', // Subtle gray ring
   },
   ringCenter: {
     width: RING_SIZE - 24,

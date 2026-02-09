@@ -111,7 +111,7 @@ const AllergiesScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '70%' }]} />
+            <View style={[styles.progressBarFill, { width: '88%' }]} />
           </View>
         </View>
 

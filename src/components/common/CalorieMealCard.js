@@ -164,7 +164,7 @@ const CalorieMealCard = ({
   );
 };
 
-const IMAGE_SIZE = 56;
+const IMAGE_SIZE = 80;
 
 const styles = StyleSheet.create({
   container: {

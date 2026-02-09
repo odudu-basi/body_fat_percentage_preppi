@@ -63,7 +63,7 @@ const WaterIntakeScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '93%' }]} />
+            <View style={[styles.progressBarFill, { width: '59%' }]} />
           </View>
         </View>
 

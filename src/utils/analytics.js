@@ -77,14 +77,21 @@ export const initAnalytics = async () => {
     }
 
     try {
-      // Add timeout to prevent hanging
-      const initPromise = Mixpanel.init(token);
+      // Instantiate Mixpanel with token (disable automatic events)
+      const trackAutomaticEvents = false;
+      const mixpanelInstance = new Mixpanel(token, trackAutomaticEvents);
+
+      // Initialize with timeout to prevent hanging
+      const initPromise = mixpanelInstance.init();
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Mixpanel init timeout')), 5000)
       );
 
-      mixpanel = await Promise.race([initPromise, timeoutPromise]);
-      isInitialized = true; // Mark as initialized
+      await Promise.race([initPromise, timeoutPromise]);
+
+      // Store the instance after successful init
+      mixpanel = mixpanelInstance;
+      isInitialized = true;
       console.log('[Analytics] ✅ Mixpanel initialized successfully');
     } catch (initError) {
       console.error('[Analytics] Mixpanel init failed:', initError);
@@ -120,16 +127,8 @@ export const trackEvent = (eventName, properties = {}) => {
   }
 
   try {
-    // Call async but don't await - fire and forget
-    // Wrap in setTimeout to ensure it runs on next tick (not blocking)
-    setTimeout(() => {
-      try {
-        mixpanel.track(eventName, properties);
-        console.log(`[Analytics] Event tracked: ${eventName}`, properties);
-      } catch (err) {
-        console.error(`[Analytics] Error in track callback:`, err);
-      }
-    }, 0);
+    mixpanel.track(eventName, properties);
+    console.log(`[Analytics] Event tracked: ${eventName}`, properties);
   } catch (error) {
     console.error(`[Analytics] Error tracking event ${eventName}:`, error);
   }
@@ -153,22 +152,15 @@ export const identifyUser = (userId, userProperties = {}) => {
   }
 
   try {
-    // Wrap in setTimeout to prevent Promise crashes
-    setTimeout(() => {
-      try {
-        // SAFE: Only identify user, DO NOT set properties
-        mixpanel.identify(userId);
-        console.log(`[Analytics] User identified: ${userId}`);
+    // Identify the user
+    mixpanel.identify(userId);
+    console.log(`[Analytics] User identified: ${userId}`);
 
-        // NOTE: User properties are NOT set to prevent native Promise crashes
-        // Event tracking still works perfectly without user profiles
-        if (Object.keys(userProperties).length > 0) {
-          console.log(`[Analytics] User properties skipped (crash prevention):`, Object.keys(userProperties));
-        }
-      } catch (err) {
-        console.error('[Analytics] Error in identify callback:', err);
-      }
-    }, 0);
+    // Set user properties if provided
+    if (Object.keys(userProperties).length > 0) {
+      mixpanel.getPeople().set(userProperties);
+      console.log(`[Analytics] User properties set:`, Object.keys(userProperties));
+    }
   } catch (error) {
     console.error('[Analytics] Error identifying user:', error);
   }
@@ -189,15 +181,8 @@ export const resetUser = () => {
   }
 
   try {
-    // Wrap in setTimeout to prevent Promise crashes
-    setTimeout(() => {
-      try {
-        mixpanel.reset();
-        console.log('[Analytics] User reset');
-      } catch (err) {
-        console.error('[Analytics] Error in reset callback:', err);
-      }
-    }, 0);
+    mixpanel.reset();
+    console.log('[Analytics] User reset');
   } catch (error) {
     console.error('[Analytics] Error resetting user:', error);
   }
@@ -219,14 +204,10 @@ export const setUserProperties = (properties) => {
   }
 
   try {
-    // DISABLED: getPeople().set() causes native Promise crashes
-    // This function is now a no-op to prevent crashes
-    console.log('[Analytics] User properties skipped (crash prevention):', Object.keys(properties));
-
-    // NOTE: Event tracking still works perfectly without user profiles
-    // We're sacrificing user profile data to prevent app crashes
+    mixpanel.getPeople().set(properties);
+    console.log('[Analytics] User properties set:', Object.keys(properties));
   } catch (error) {
-    console.error('[Analytics] Error in setUserProperties:', error);
+    console.error('[Analytics] Error setting user properties:', error);
   }
 };
 

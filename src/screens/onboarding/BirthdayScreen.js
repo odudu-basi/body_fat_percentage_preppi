@@ -61,7 +61,7 @@ const BirthdayScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '50%' }]} />
+            <View style={[styles.progressBarFill, { width: '18%' }]} />
           </View>
         </View>
 

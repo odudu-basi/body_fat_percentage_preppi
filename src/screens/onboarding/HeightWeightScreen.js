@@ -77,7 +77,7 @@ const HeightWeightScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '75%' }]} />
+            <View style={[styles.progressBarFill, { width: '24%' }]} />
           </View>
         </View>
 

@@ -47,7 +47,7 @@ const TestimonialsScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '97%' }]} />
+            <View style={[styles.progressBarFill, { width: '100%' }]} />
           </View>
         </View>
 

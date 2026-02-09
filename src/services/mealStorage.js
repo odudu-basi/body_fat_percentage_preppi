@@ -221,6 +221,11 @@ export const updateMeal = async (mealId, updates) => {
         if (updates.macros.sugar_g !== undefined) meal.sugar_g = updates.macros.sugar_g;
         if (updates.macros.sodium_mg !== undefined) meal.sodium_mg = updates.macros.sodium_mg;
       }
+      // Update ingredients in ai_analysis
+      if (updates.ingredients !== undefined) {
+        if (!meal.ai_analysis) meal.ai_analysis = {};
+        meal.ai_analysis.ingredients = updates.ingredients;
+      }
 
       meals[mealIndex] = meal;
       await AsyncStorage.setItem('@bodymax:meal_logs', JSON.stringify(meals));
@@ -239,6 +244,33 @@ export const updateMeal = async (mealId, updates) => {
         if (updates.macros.sugar_g !== undefined) updateData.sugar_g = updates.macros.sugar_g;
         if (updates.macros.sodium_mg !== undefined) updateData.sodium_mg = updates.macros.sodium_mg;
       }
+      // Update ingredients in ai_analysis JSONB field
+      if (updates.ingredients !== undefined) {
+        console.log('[updateMeal] Updating ingredients for meal:', mealId);
+        console.log('[updateMeal] New ingredients:', JSON.stringify(updates.ingredients, null, 2));
+
+        // First, fetch current ai_analysis to merge with it
+        const { data: currentMeal, error: fetchError } = await supabase
+          .from('meal_logs')
+          .select('ai_analysis')
+          .eq('id', mealId)
+          .single();
+
+        if (fetchError) {
+          console.error('[updateMeal] Error fetching current meal:', fetchError);
+          throw fetchError;
+        }
+
+        const currentAiAnalysis = currentMeal?.ai_analysis || {};
+        updateData.ai_analysis = {
+          ...currentAiAnalysis,
+          ingredients: updates.ingredients,
+        };
+
+        console.log('[updateMeal] Merged ai_analysis:', JSON.stringify(updateData.ai_analysis, null, 2));
+      }
+
+      console.log('[updateMeal] Final updateData:', JSON.stringify(updateData, null, 2));
 
       const { data, error } = await supabase
         .from('meal_logs')
@@ -247,8 +279,13 @@ export const updateMeal = async (mealId, updates) => {
         .select()
         .single();
 
-      if (error) throw error;
-      console.log('Meal updated:', mealId);
+      if (error) {
+        console.error('[updateMeal] Supabase update error:', error);
+        throw error;
+      }
+
+      console.log('[updateMeal] Meal updated successfully:', mealId);
+      console.log('[updateMeal] Updated meal data:', JSON.stringify(data, null, 2));
       return data ? await formatMealFromDB(data) : null;
     }
   } catch (error) {
@@ -409,9 +446,10 @@ export const getWeeklyNutritionData = async (weekStartDate) => {
  * @param {Object} analysisResult - AI analysis result
  * @param {string} photoUri - Photo URI
  * @param {number} servings - Number of servings
+ * @param {Array} ingredients - Optional ingredients array (overrides analysisResult.ingredients)
  * @returns {Object} - Formatted meal data
  */
-export const formatMealForStorage = (analysisResult, photoUri, servings = 1) => {
+export const formatMealForStorage = (analysisResult, photoUri, servings = 1, ingredients = null) => {
   const adjustedCalories = Math.round((analysisResult?.total_calories || 0) * servings);
   const adjustedMacros = {
     protein_g: Math.round((analysisResult?.macros?.protein_g || 0) * servings),
@@ -422,12 +460,15 @@ export const formatMealForStorage = (analysisResult, photoUri, servings = 1) => 
     sodium_mg: Math.round((analysisResult?.macros?.sodium_mg || 0) * servings),
   };
 
+  // Use provided ingredients if available, otherwise fall back to analysisResult
+  const finalIngredients = ingredients !== null ? ingredients : (analysisResult?.ingredients || []);
+
   return {
     meal_name: analysisResult?.meal_name || 'Unknown Meal',
     meal_time: analysisResult?.meal_time || 'snack',
     total_calories: adjustedCalories,
     macros: adjustedMacros,
-    ingredients: analysisResult?.ingredients || [],
+    ingredients: finalIngredients,
     confidence: analysisResult?.confidence || 'medium',
     notes: analysisResult?.notes || '',
     photo_uri: photoUri,

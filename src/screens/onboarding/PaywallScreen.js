@@ -9,13 +9,24 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { Colors, Fonts, Spacing } from '../../constants/theme';
 import { trackPaywallView, trackSubscriptionPurchase } from '../../utils/analytics';
-import { trackTikTokSubscribe, trackTikTokPurchase } from '../../services/tiktokTracking';
 import { useSubscription } from '../../context/SubscriptionContext';
 import { useAuth } from '../../context/AuthContext';
 import LoadingIndicator from '../../components/common/LoadingIndicator';
 
 // Check if we're in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
+
+// Safely import TikTok tracking - only works in production builds
+let trackTikTokSubscribe, trackTikTokPurchase;
+try {
+  const tiktok = require('../../services/tiktokTracking');
+  trackTikTokSubscribe = tiktok.trackTikTokSubscribe || (() => {});
+  trackTikTokPurchase = tiktok.trackTikTokPurchase || (() => {});
+} catch (e) {
+  console.log('[PaywallScreen] TikTok tracking not available');
+  trackTikTokSubscribe = () => {};
+  trackTikTokPurchase = () => {};
+}
 
 // Conditionally import Superwall only in production
 let usePlacement;

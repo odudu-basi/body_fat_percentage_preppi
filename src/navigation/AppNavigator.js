@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -7,15 +7,20 @@ import Constants from 'expo-constants';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useSubscriptionSync } from '../context/SubscriptionSyncContext';
+import { useTutorial } from '../context/TutorialContext';
+import BuddyIntroScreen from '../components/tutorial/BuddyIntroScreen';
+import TutorialOverlay from '../components/tutorial/TutorialOverlay';
 
 // Check if we're in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
 import {
   WelcomeScreen,
+  NameScreen,
   GenderScreen,
   BirthdayScreen,
   HeightWeightScreen,
   EthnicityScreen,
+  ReferralSourceScreen,
   WorkoutFrequencyScreen,
   TargetWeightScreen,
   TargetBodyFatScreen,
@@ -47,6 +52,24 @@ import MainAllergiesScreen from '../screens/AllergiesScreen';
 import ReplaceMealScreen from '../screens/ReplaceMealScreen';
 import CustomTabBar from '../components/common/CustomTabBar';
 import { Colors } from '../constants/theme';
+
+// Conditionally import CustomCameraScreen only in production (requires expo-camera native module)
+let CustomCameraScreen;
+if (!isExpoGo) {
+  CustomCameraScreen = require('../screens/CustomCameraScreen').default;
+} else {
+  // Expo Go - provide dummy component that shows message
+  CustomCameraScreen = () => {
+    const { View, Text, StyleSheet } = require('react-native');
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.dark.background, padding: 20 }}>
+        <Text style={{ color: Colors.dark.textPrimary, fontSize: 18, textAlign: 'center' }}>
+          Custom Camera is not available in Expo Go.{'\n\n'}Please use a development build to access the camera.
+        </Text>
+      </View>
+    );
+  };
+}
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -96,10 +119,12 @@ const AuthNavigator = () => {
       }}
     >
       <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
+      <AuthStack.Screen name="Name" component={NameScreen} />
       <AuthStack.Screen name="Gender" component={GenderScreen} />
       <AuthStack.Screen name="Birthday" component={BirthdayScreen} />
       <AuthStack.Screen name="HeightWeight" component={HeightWeightScreen} />
       <AuthStack.Screen name="Ethnicity" component={EthnicityScreen} />
+      <AuthStack.Screen name="ReferralSource" component={ReferralSourceScreen} />
       <AuthStack.Screen name="WorkoutFrequency" component={WorkoutFrequencyScreen} />
       <AuthStack.Screen name="TargetWeight" component={TargetWeightScreen} />
       <AuthStack.Screen name="TargetBodyFat" component={TargetBodyFatScreen} />
@@ -216,6 +241,15 @@ const MainNavigator = () => {
           animation: 'slide_from_right',
         }}
       />
+      <Stack.Screen
+        name="CustomCamera"
+        component={CustomCameraScreen}
+        options={{
+          animation: 'slide_from_bottom',
+          presentation: 'fullScreenModal',
+          headerShown: false,
+        }}
+      />
     </Stack.Navigator>
   );
 };
@@ -234,9 +268,32 @@ const LoadingScreen = () => (
 const AppNavigator = () => {
   const { isAuthenticated, initialized, loading } = useAuth();
   const { isPro, isLoading: subLoading } = useSubscription();
+  const { tutorialSeen, showTutorial, startTutorial } = useTutorial();
 
-  // Show loading while initializing auth
-  if (!initialized || loading) {
+  // Handle tutorial initialization after render
+  useEffect(() => {
+    // Only start tutorial if:
+    // 1. Auth is initialized and user is authenticated
+    // 2. Not currently loading subscription status
+    // 3. Tutorial hasn't been seen yet
+    // 4. Tutorial is not already showing
+    if (!initialized || loading || tutorialSeen === null || tutorialSeen || showTutorial) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      return;
+    }
+
+    // In Expo Go or if user is subscribed, start tutorial
+    if (isExpoGo || (!subLoading && isPro)) {
+      console.log('[AppNavigator] Starting tutorial for first-time user');
+      startTutorial();
+    }
+  }, [initialized, loading, tutorialSeen, showTutorial, isAuthenticated, subLoading, isPro, startTutorial]);
+
+  // Show loading while initializing auth or tutorial status
+  if (!initialized || loading || tutorialSeen === null) {
     return <LoadingScreen />;
   }
 
@@ -258,7 +315,13 @@ const AppNavigator = () => {
   // In Expo Go, skip subscription check (RevenueCat doesn't work in Expo Go)
   if (isExpoGo) {
     console.log('[AppNavigator] Dev mode - bypassing subscription check');
-    return <MainNavigator />;
+
+    return (
+      <>
+        <MainNavigator />
+        <TutorialOverlay />
+      </>
+    );
   }
 
   // Check subscription status (RevenueCat is source of truth)
@@ -268,9 +331,15 @@ const AppNavigator = () => {
     return <PaywallNavigator />;
   }
 
-  // User is authenticated AND subscribed - show main app
+  // User is authenticated AND subscribed
   console.log('[AppNavigator] User authenticated and subscribed - showing main app');
-  return <MainNavigator />;
+
+  return (
+    <>
+      <MainNavigator />
+      <TutorialOverlay />
+    </>
+  );
 };
 
 const styles = StyleSheet.create({

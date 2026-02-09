@@ -41,7 +41,7 @@ const FoodStrugglesScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '55%' }]} />
+            <View style={[styles.progressBarFill, { width: '65%' }]} />
           </View>
         </View>
 

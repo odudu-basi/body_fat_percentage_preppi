@@ -41,7 +41,7 @@ const ExerciseStrugglesScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '60%' }]} />
+            <View style={[styles.progressBarFill, { width: '71%' }]} />
           </View>
         </View>
 

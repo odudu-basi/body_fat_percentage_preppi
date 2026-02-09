@@ -55,7 +55,7 @@ const GenderScreen = () => {
         {/* Progress Bar */}
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '33%' }]} />
+            <View style={[styles.progressBarFill, { width: '12%' }]} />
           </View>
         </View>
 

@@ -24,10 +24,27 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { Colors } from './src/constants/theme';
 import { AuthProvider } from './src/context/AuthContext';
 import { SubscriptionProvider } from './src/context/SubscriptionContext';
-import { initializeTikTokSDK, trackTikTokLaunchApp } from './src/services/tiktokTracking';
+import { TutorialProvider } from './src/context/TutorialContext';
 
 // Check if we're in Expo Go (development mode)
 const isExpoGo = Constants.appOwnership === 'expo';
+
+// Conditionally import TikTok SDK only in production
+let initializeTikTokSDK, trackTikTokLaunchApp;
+if (!isExpoGo) {
+  const tiktokModule = require('./src/services/tiktokTracking');
+  initializeTikTokSDK = tiktokModule.initializeTikTokSDK;
+  trackTikTokLaunchApp = tiktokModule.trackTikTokLaunchApp;
+} else {
+  // Expo Go - provide dummy functions
+  initializeTikTokSDK = async () => {
+    console.log('[App] 🔧 DEV MODE: TikTok SDK not available in Expo Go');
+    return false;
+  };
+  trackTikTokLaunchApp = async () => {
+    console.log('[App] 🔧 DEV MODE: TikTok tracking not available in Expo Go');
+  };
+}
 
 // Conditionally import Superwall and RevenueCat only in production
 let SuperwallProvider, SuperwallLoaded, SuperwallLoading;
@@ -135,21 +152,23 @@ export default function App() {
         <SafeAreaProvider>
           <AuthProvider>
             <SubscriptionProvider>
-              <SubscriptionSyncContext>
-                <UserIdentificationSync>
-                  <View style={styles.container} onLayout={onLayoutRootView}>
-                    <StatusBar style="light" />
-                    <NavigationContainer
-                      ref={navigationRef}
-                      onReady={() => {
-                        routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
-                      }}
-                    >
-                      <AppNavigator />
-                    </NavigationContainer>
-                  </View>
-                </UserIdentificationSync>
-              </SubscriptionSyncContext>
+              <TutorialProvider>
+                <SubscriptionSyncContext>
+                  <UserIdentificationSync>
+                    <View style={styles.container} onLayout={onLayoutRootView}>
+                      <StatusBar style="light" />
+                      <NavigationContainer
+                        ref={navigationRef}
+                        onReady={() => {
+                          routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
+                        }}
+                      >
+                        <AppNavigator />
+                      </NavigationContainer>
+                    </View>
+                  </UserIdentificationSync>
+                </SubscriptionSyncContext>
+              </TutorialProvider>
             </SubscriptionProvider>
           </AuthProvider>
         </SafeAreaProvider>
@@ -169,21 +188,23 @@ export default function App() {
             <SuperwallLoaded>
               <AuthProvider>
                 <SubscriptionProvider>
-                  <SubscriptionSyncContext>
-                    <UserIdentificationSync>
-                      <View style={styles.container} onLayout={onLayoutRootView}>
-                        <StatusBar style="light" />
-                        <NavigationContainer
-                          ref={navigationRef}
-                          onReady={() => {
-                            routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
-                          }}
-                        >
-                          <AppNavigator />
-                        </NavigationContainer>
-                      </View>
-                    </UserIdentificationSync>
-                  </SubscriptionSyncContext>
+                  <TutorialProvider>
+                    <SubscriptionSyncContext>
+                      <UserIdentificationSync>
+                        <View style={styles.container} onLayout={onLayoutRootView}>
+                          <StatusBar style="light" />
+                          <NavigationContainer
+                            ref={navigationRef}
+                            onReady={() => {
+                              routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
+                            }}
+                          >
+                            <AppNavigator />
+                          </NavigationContainer>
+                        </View>
+                      </UserIdentificationSync>
+                    </SubscriptionSyncContext>
+                  </TutorialProvider>
                 </SubscriptionProvider>
               </AuthProvider>
             </SuperwallLoaded>

@@ -243,13 +243,15 @@ export const AuthProvider = ({ children }) => {
       // Process onboarding data
       const profileData = {
         id: 'dev-user',
-        full_name: 'Dev User',
+        full_name: onboardingData.name || 'Dev User',
         email: 'dev@example.com',
+        name: onboardingData.name,
         gender: onboardingData.gender,
         birthday: onboardingData.birthday,
         height_cm: onboardingData.height_cm,
         weight_kg: onboardingData.weight_kg,
         ethnicity: onboardingData.ethnicity,
+        referral_source: onboardingData.referral_source,
         workout_frequency: onboardingData.workoutFrequency,
         water_intake_liters: onboardingData.waterIntake,
         kitchen_items: onboardingData.kitchen_items || [],
@@ -335,6 +337,7 @@ export const AuthProvider = ({ children }) => {
           console.log('💾 Saving onboarding data to profile:', onboardingData);
 
           const profileUpdates = {
+            name: onboardingData.name,
             gender: onboardingData.gender,
             birthday: onboardingData.birthday,
             height_cm: onboardingData.height_cm,
@@ -342,6 +345,7 @@ export const AuthProvider = ({ children }) => {
             target_weight_kg: onboardingData.target_weight_kg,
             target_body_fat_percentage: onboardingData.target_body_fat_percentage,
             ethnicity: onboardingData.ethnicity,
+            referral_source: onboardingData.referral_source,
             workout_frequency: onboardingData.workoutFrequency,
             water_intake_liters: onboardingData.waterIntake,
             kitchen_items: onboardingData.kitchen_items || [],
@@ -374,7 +378,7 @@ export const AuthProvider = ({ children }) => {
           const newProfile = {
             id: data.user.id,
             email,
-            full_name: email.split('@')[0], // Use email prefix as name
+            full_name: onboardingData.name || email.split('@')[0], // Use provided name or email prefix
             ...profileUpdates,
           };
 
@@ -439,11 +443,13 @@ export const AuthProvider = ({ children }) => {
             console.log('💾 Updating profile with onboarding data');
 
             const profileUpdates = {
+              name: onboardingData.name,
               gender: onboardingData.gender,
               birthday: onboardingData.birthday,
               height_cm: onboardingData.height_cm,
               weight_kg: onboardingData.weight_kg,
               ethnicity: onboardingData.ethnicity,
+              referral_source: onboardingData.referral_source,
               workout_frequency: onboardingData.workoutFrequency,
               water_intake_liters: onboardingData.waterIntake,
               difficulty: onboardingData.difficulty || 'medium',
@@ -521,6 +527,7 @@ export const AuthProvider = ({ children }) => {
 
             // Process onboarding data
             const profileUpdates = {
+              name: onboardingData.name,
               gender: onboardingData.gender,
               birthday: onboardingData.birthday,
               height_cm: onboardingData.height_cm,
@@ -528,6 +535,7 @@ export const AuthProvider = ({ children }) => {
               target_weight_kg: onboardingData.target_weight_kg,
               target_body_fat_percentage: onboardingData.target_body_fat_percentage,
               ethnicity: onboardingData.ethnicity,
+              referral_source: onboardingData.referral_source,
               workout_frequency: onboardingData.workoutFrequency,
               water_intake_liters: onboardingData.waterIntake,
               kitchen_items: onboardingData.kitchen_items || [],

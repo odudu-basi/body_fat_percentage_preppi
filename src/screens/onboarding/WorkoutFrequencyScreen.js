@@ -47,7 +47,7 @@ const WorkoutFrequencyScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '90%' }]} />
+            <View style={[styles.progressBarFill, { width: '41%' }]} />
           </View>
         </View>
 

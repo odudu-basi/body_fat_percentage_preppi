@@ -147,7 +147,7 @@ const TargetWeightScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '45%' }]} />
+            <View style={[styles.progressBarFill, { width: '47%' }]} />
           </View>
         </View>
 

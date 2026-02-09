@@ -118,7 +118,7 @@ const TargetBodyFatScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '50%' }]} />
+            <View style={[styles.progressBarFill, { width: '53%' }]} />
           </View>
         </View>
 

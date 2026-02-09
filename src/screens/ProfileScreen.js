@@ -17,8 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Spacing, BorderRadius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
+import { useTutorial } from '../context/TutorialContext';
 import { calculateNutritionTargets } from '../utils/calorieCalculator';
-import { getTodaysExercises, deleteExercise, deleteAllTodaysExercises } from '../services/exerciseStorage';
+import { getTodaysExercises, deleteExercise, updateExercisesForDifficulty } from '../services/exerciseStorage';
 import { getTodayLocalDate } from '../utils/dateUtils';
 
 // Profile Card Component
@@ -176,6 +177,7 @@ const ProfileScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { user, profile, signOut, updateProfile, deleteAccount } = useAuth();
   const { isPro, isLoading: subLoading } = useSubscription();
+  const { resetTutorial, startTutorial } = useTutorial();
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editModalConfig, setEditModalConfig] = useState(null);
   const [selectionModalVisible, setSelectionModalVisible] = useState(false);
@@ -208,7 +210,7 @@ const ProfileScreen = ({ navigation }) => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await deleteAccount();
+            const { error} = await deleteAccount();
             if (error) {
               Alert.alert('Error', 'Failed to delete account. Please try again.');
             } else {
@@ -219,6 +221,15 @@ const ProfileScreen = ({ navigation }) => {
         },
       ]
     );
+  };
+
+  const handleRestartTutorial = async () => {
+    console.log('[ProfileScreen] Restarting tutorial');
+    await resetTutorial();
+    // Navigate to Home tab first
+    navigation.navigate('MainTabs', { screen: 'Home' });
+    // Start tutorial
+    startTutorial();
   };
 
   const handlePrivacyPolicy = async () => {
@@ -418,14 +429,14 @@ const ProfileScreen = ({ navigation }) => {
         ...nutritionTargets,
       });
 
-      // Delete ALL of today's exercises so they can be recreated with the new difficulty
-      console.log('[ProfileScreen] Deleting ALL exercises for today...');
-      const deleteResult = await deleteAllTodaysExercises();
-      console.log(`[ProfileScreen] Deleted ${deleteResult.deleted} exercises`);
+      // Update exercises for new difficulty while preserving checked ones
+      console.log('[ProfileScreen] Updating exercises for new difficulty...');
+      const updateResult = await updateExercisesForDifficulty(newDifficulty);
+      console.log(`[ProfileScreen] Exercise update: kept ${updateResult.kept} completed, added ${updateResult.added}, deleted ${updateResult.deleted}`);
 
       Alert.alert(
         'Difficulty Updated',
-        'Your difficulty level has been changed. Calories, macros, and exercises have been updated.',
+        'Your difficulty level has been changed. Calories, macros, and exercises have been updated. Completed exercises were preserved.',
         [{ text: 'OK' }]
       );
     } catch (error) {
@@ -670,6 +681,18 @@ const ProfileScreen = ({ navigation }) => {
                   <Ionicons name="chatbox-outline" size={22} color={Colors.dark.textPrimary} />
                 </View>
                 <Text style={styles.cardLabel}>Send Feedback</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.dark.textSecondary} />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleRestartTutorial} activeOpacity={0.7}>
+            <View style={styles.card}>
+              <View style={styles.cardLeft}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="book-outline" size={22} color={Colors.dark.textPrimary} />
+                </View>
+                <Text style={styles.cardLabel}>Restart Tutorial</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={Colors.dark.textSecondary} />
             </View>

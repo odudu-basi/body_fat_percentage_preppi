@@ -149,7 +149,7 @@ const ScanDetailsScreen = ({ route, navigation }) => {
         >
           <Ionicons name="chevron-back" size={28} color={Colors.dark.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Scan Details</Text>
+        <Text style={styles.headerTitle}>Progress Photo</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -160,12 +160,6 @@ const ScanDetailsScreen = ({ route, navigation }) => {
       >
         {/* Date */}
         <Text style={styles.dateText}>{formattedDate}</Text>
-
-        {/* Body Fat Percentage - Main Display */}
-        <View style={styles.percentageSection}>
-          <Text style={styles.percentageValue}>{percentage}</Text>
-          <Text style={styles.percentageLabel}>% Body Fat</Text>
-        </View>
 
         {/* Image Carousel */}
         {images.length > 0 && (
@@ -211,22 +205,6 @@ const ScanDetailsScreen = ({ route, navigation }) => {
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Weight</Text>
               <Text style={styles.infoValue}>{displayWeight}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Confidence Level */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <View style={styles.infoIconContainer}>
-              <Ionicons name="analytics-outline" size={24} color={Colors.dark.primary} />
-            </View>
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Confidence Level</Text>
-              <Text style={styles.infoValue}>{confidenceText}</Text>
-              {tolerance && (
-                <Text style={styles.infoSubtext}>Tolerance: {tolerance}</Text>
-              )}
             </View>
           </View>
         </View>

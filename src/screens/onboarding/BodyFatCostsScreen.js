@@ -100,7 +100,7 @@ const BodyFatCostsScreen = () => {
 
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: '95%' }]} />
+            <View style={[styles.progressBarFill, { width: '76%' }]} />
           </View>
         </View>
 

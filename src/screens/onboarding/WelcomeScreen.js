@@ -137,8 +137,8 @@ const WelcomeScreen = () => {
   }, [headlineComplete]);
 
   const handleGetStarted = () => {
-    // Navigate to gender selection screen
-    navigation.navigate('Gender');
+    // Navigate to name screen (first onboarding step)
+    navigation.navigate('Name');
   };
 
   const handleSignIn = async () => {

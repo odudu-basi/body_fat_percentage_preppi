@@ -1,8 +1,10 @@
 export { default as WelcomeScreen } from './WelcomeScreen';
+export { default as NameScreen } from './NameScreen';
 export { default as GenderScreen } from './GenderScreen';
 export { default as BirthdayScreen } from './BirthdayScreen';
 export { default as HeightWeightScreen } from './HeightWeightScreen';
 export { default as EthnicityScreen } from './EthnicityScreen';
+export { default as ReferralSourceScreen } from './ReferralSourceScreen';
 export { default as WorkoutFrequencyScreen } from './WorkoutFrequencyScreen';
 export { default as TargetWeightScreen } from './TargetWeightScreen';
 export { default as TargetBodyFatScreen } from './TargetBodyFatScreen';
